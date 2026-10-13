@@ -21,7 +21,10 @@ enum DebugSnapshot {
             guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { exit(1) }
             view.cacheDisplay(in: rect, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
-            exit(0)
+            // MUSICMEMO_SAVE_ON_EXIT=1 なら、開いているファイルを保存してから終了する（保存の確認用）
+            guard ProcessInfo.processInfo.environment["MUSICMEMO_SAVE_ON_EXIT"] == "1" else { exit(0) }
+            NSDocumentController.shared.saveAllDocuments(nil)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { exit(0) }
         }
     }
 }

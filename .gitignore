@@ -7,3 +7,6 @@ DerivedData/
 
 # SoundFont はリポジトリに含めない（Scripts/fetch-soundfont.sh で取得）
 App/Resources/SoundFonts/*.sf2
+
+# XcodeGen が生成（project.yml の info から）
+Support/Info.plist

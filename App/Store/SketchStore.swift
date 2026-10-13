@@ -54,9 +54,12 @@ final class SketchStore {
     /// 鍵盤の音。
     private let sound = SoundEngine()
 
-    init(sketch: Sketch = SampleData.sketch03()) {
-        self.sketch = sketch
-        self.editor = SampleData.editorState(for: sketch)
+    init(file: SketchFile) {
+        self.sketch = file.sketch
+        self.editor = file.editor ?? EditorState(selectedTrackID: file.sketch.tracks.first?.id)
+        if editor.selectedTrackID.map({ id in !sketch.tracks.contains { $0.id == id } }) ?? true {
+            editor.selectedTrackID = sketch.tracks.first?.id
+        }
         sound.prepare(sketch.tracks)
         #if DEBUG
         // 開発用：MUSICMEMO_ZOOM=2 などで起動時の倍率を指定する（ズーム時の画面確認用）
@@ -431,6 +434,13 @@ final class SketchStore {
 
     func toggleTie() {
         editor.isTieOn.toggle()
+    }
+
+    /// ファイルに保存する画面状態（入力予定の音高は保存しない）。
+    var savedEditorState: EditorState {
+        var state = editor
+        state.previewPitch = nil
+        return state
     }
 
     func toggleMute(of id: Track.ID) {

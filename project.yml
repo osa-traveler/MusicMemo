@@ -21,6 +21,23 @@ targets:
       - App
     dependencies:
       - package: MusicMemoCore
+    info:
+      path: Support/Info.plist
+      properties:
+        # 1曲＝1ファイル（.musicmemo）
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: local.osa.musicmemo.sketch
+            UTTypeDescription: MusicMemo スケッチ
+            UTTypeConformsTo: [public.json, public.data]
+            UTTypeTagSpecification:
+              public.filename-extension: [musicmemo]
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: MusicMemo スケッチ
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Owner
+            LSItemContentTypes: [local.osa.musicmemo.sketch]
+        LSSupportsOpeningDocumentsInPlace: true
+        UISupportsDocumentBrowser: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.osa.MusicMemo

@@ -2,13 +2,14 @@ import MusicMemoCore
 import SwiftUI
 
 /// トップバー（高さ64）。戻る、曲名と曲の情報、再生／ループ／メトロノーム、元に戻す／やり直す、Logicへ書き出し。
-/// 戻るボタン以外は動く。
+/// 戻るボタンはファイルを閉じて一覧へ戻る（Mac はウィンドウを閉じる）。
 struct TopBarView: View {
     let sketch: Sketch
     let isPlaying: Bool
     let isMetronomeOn: Bool
     let canUndo: Bool
     let canRedo: Bool
+    let onBack: () -> Void
     let onTogglePlayback: () -> Void
     let onToggleMetronome: () -> Void
     let onToggleLoop: () -> Void
@@ -18,7 +19,7 @@ struct TopBarView: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            iconButton("chevron.left", label: "スケッチ一覧へ戻る", size: 20, weight: .semibold) {}
+            iconButton("chevron.left", label: "スケッチ一覧へ戻る", size: 20, weight: .semibold, action: onBack)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(sketch.title)

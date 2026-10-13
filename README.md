@@ -9,6 +9,7 @@
 - 音価を選んで鍵盤を押すと、編集位置に音符が入って自動で進む
 - 曲全体を小節カードで見渡す全体ビュー（横スクロールバーを兼ねる）
 - 再生（ループ、ミュート・ソロ、メトロノーム）
+- 1曲＝1ファイルで自動保存（iCloud Drive に置けば iPad と Mac で共有）
 - MusicXML（コード記号付き）と MIDI で書き出し
 
 ## ドキュメント
@@ -45,9 +46,11 @@ open MusicMemo.xcodeproj
 | `App/Overview/` | 全体ビュー |
 | `App/InputPalette/` | 入力パレット（音価、鍵盤、入力方法） |
 | `App/Store/` | 画面の状態と操作（SketchStore） |
+| `App/Document/` | 曲のファイル（DocumentGroup の FileDocument） |
 | `App/Audio/` | 鍵盤の音と再生（AVAudioUnitSampler、再生のスケジューラ） |
 | `App/Export/` | 書き出しの操作（保存ダイアログ・共有シート） |
 | `App/Theme/` | 色と寸法 |
 | `App/Debug/` | 開発用の仕組み（デバッグビルドのみ） |
-| `Packages/MusicMemoCore/` | 曲データ、記譜、入力、書き出しの処理（UI に依存しない。テストあり） |
+| `Packages/MusicMemoCore/` | 曲データ、ファイル形式、記譜、入力、書き出しの処理（UI に依存しない。テストあり） |
+| `Support/Info.plist` | XcodeGen が生成（ファイル形式の登録など。編集は `project.yml` で。リポジトリには含めない） |
 | `Scripts/` | 補助スクリプト |
