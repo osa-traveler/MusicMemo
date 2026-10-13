@@ -8,7 +8,7 @@ import os
 /// 音声の操作はすべて専用のキューで行い、画面の処理を止めない。
 /// 将来は外部 MIDI 音源や AU に差し替えられるよう、ここだけで音を扱う。
 final class SoundEngine: @unchecked Sendable {
-    static let soundFontName = "GeneralUser-GS"
+    static let soundFontName = "FluidR3_GM"
     /// GM のメロディ楽器のバンク（kAUSampleBankMSB_Melodic。C のマクロなので値で書く）。
     private static let melodicBankMSB: UInt8 = 0x79
     /// GM のドラムのバンク（kAUSampleBankMSB_Percussion）。
@@ -20,8 +20,9 @@ final class SoundEngine: @unchecked Sendable {
     private var programs: [UUID: Int] = [:]
     private let soundFontURL = SoundEngine.soundBankURL()
 
-    /// 使う音源。Mac は macOS 標準の音源（gs_instruments.dls）、iPad は同梱の GeneralUser GS。
-    /// GeneralUser GS は AVAudioUnitSampler で再生すると落ちることがあるため、Mac では使わない（docs/ROADMAP.md）。
+    /// 使う音源。同梱の FluidR3_GM（Scripts/fetch-soundfont.sh で取得）。
+    /// 無ければ Mac では macOS 標準の音源（gs_instruments.dls）を使う。
+    /// （GeneralUser GS は AVAudioUnitSampler で再生すると落ちることがあったため使わない。docs/ROADMAP.md）
     private static func soundBankURL() -> URL? {
         #if DEBUG
         // 開発用：MUSICMEMO_SOUNDBANK で音源ファイルを差し替える（音源ごとの不具合の切り分け用）
@@ -29,14 +30,18 @@ final class SoundEngine: @unchecked Sendable {
             return URL(fileURLWithPath: path)
         }
         #endif
+        if let bundled = Bundle.main.url(forResource: soundFontName, withExtension: "sf2") {
+            return bundled
+        }
         #if os(macOS)
         let systemBank = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls")
         if FileManager.default.fileExists(atPath: systemBank.path) {
             return systemBank
         }
         #endif
-        return Bundle.main.url(forResource: soundFontName, withExtension: "sf2")
+        return nil
     }
+
     private let log = Logger(subsystem: "MusicMemo", category: "Sound")
 
     // 再生
@@ -47,7 +52,7 @@ final class SoundEngine: @unchecked Sendable {
         if let soundFontURL {
             log.info("音源: \(soundFontURL.lastPathComponent, privacy: .public)")
         } else {
-            log.warning("GeneralUser-GS.sf2 が見つからない（Scripts/fetch-soundfont.sh で取得）。音は鳴らない。")
+            log.warning("FluidR3_GM.sf2 が見つからない（Scripts/fetch-soundfont.sh で取得）。音は鳴らない。")
         }
         // メトロノームの音も起動時に読み込んでおく（エンジンが動いている間の読み込みを避ける）
         queue.async { [self] in _ = metronomeSampler() }

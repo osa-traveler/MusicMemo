@@ -8,10 +8,39 @@
 - ライセンス：SIL Open Font License 1.1（全文は [App/Resources/Fonts/Bravura-OFL.txt](App/Resources/Fonts/Bravura-OFL.txt)）
 - 改変なしで同梱している
 
-## GeneralUser GS
+## FluidR3_GM
 
-- 用途：iPad の鍵盤の音と再生（AVAudioUnitSampler で読み込む GM 音色）。Mac では使っていない（macOS 標準の音源 gs_instruments.dls を使う。OS に入っているものを読むだけで、同梱・再配布はしない）
-- 取得元：https://github.com/mrbumpy409/GeneralUser-GS （v2.0.3、コミット 97049183643d5fc5a9322a69c5b09efb667c6c3a）
-- 作者：S. Christian Collins（https://www.schristiancollins.com/generaluser）
-- ライセンス：GeneralUser GS License v2.0（取得元の documentation/LICENSE.txt）。個人・商用の音楽制作に制限なく使え、ソフトウェアへの組み込みも認められている
-- **このリポジトリには含めていない**。ライセンスに「一部のサンプルの出所を完全には確認できていない」旨の記載があるため、公開リポジトリでの再配布は避け、`Scripts/fetch-soundfont.sh` で取得する（コミットとハッシュを固定）
+- 用途：鍵盤の音と再生（AVAudioUnitSampler で読み込む GM 音色）。iPad と Mac で共通
+- 取得元：Debian の公式パッケージ fluid-soundfont-gm 3.1-6（https://deb.debian.org/debian/pool/main/f/fluid-soundfont/）の `FluidR3_GM.sf2`
+- **このリポジトリには含めていない**。約148MB あり GitHub の1ファイルの上限を超えるため、`Scripts/fetch-soundfont.sh` で取得してアプリに同梱する（パッケージと SoundFont のハッシュを固定）
+- ライセンス：MIT
+
+```
+Copyright (c) 2000-2002, 2008 Frank Wen <getfrank@gmail.com>
+Copyright (c) 2008 Toby Smithe
+
+Permission is hereby granted, free of charge, to any person
+obtaining a copy of this software and associated documentation
+files (the "Software"), to deal in the Software without
+restriction, including without limitation the rights to use,
+copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the
+Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+```
+
+## macOS 標準の音源（gs_instruments.dls）
+
+- FluidR3_GM が無いときだけ、Mac で予備として使う。OS に入っているファイルを読むだけで、同梱・再配布はしない

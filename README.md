@@ -27,12 +27,12 @@
 
 ```sh
 brew install xcodegen          # 未導入なら
-Scripts/fetch-soundfont.sh     # iPad 用の音源（GeneralUser GS）を取得。リポジトリには含めていない（Mac は macOS 標準の音源を使う）
+Scripts/fetch-soundfont.sh     # 音源（FluidR3_GM、約148MB）を取得。リポジトリには含めていない
 xcodegen generate              # MusicMemo.xcodeproj を生成（SoundFont を取得したあとに実行）
 open MusicMemo.xcodeproj
 ```
 
-- SoundFont が無くてもビルド・起動はできる（音が鳴らないだけ）
+- SoundFont が無くてもビルド・起動はできる（iPad は音が鳴らない。Mac は macOS 標準の音源で鳴る）
 - `.xcodeproj` は生成物なのでリポジトリに含めていない。ファイルを追加・削除したら `xcodegen generate` をやり直す
 - モデル層のテスト：`cd Packages/MusicMemoCore && swift test`
 

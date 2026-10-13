@@ -11,7 +11,7 @@
 | プロジェクト | XcodeGen（`project.yml`）で生成。1つのアプリターゲットで iPad と Mac に対応 |
 | モデル層 | ローカルの Swift Package `MusicMemoCore`。曲データ・記譜・入力・書き出しを UI から切り離し、`swift test` で検証 |
 | 譜面の記号 | Bravura（SMuFL）のグリフを輪郭（パス）として描く。五線・符幹・連桁などは線で描く |
-| 音 | AVAudioUnitSampler。音源は Mac が macOS 標準の音源（gs_instruments.dls）、iPad が GeneralUser GS（SoundFont。リポジトリには含めず取得スクリプトで入れる）。再生は自前のスケジューラ |
+| 音 | AVAudioUnitSampler ＋ FluidR3_GM（SoundFont、MIT。リポジトリには含めず取得スクリプトで入れる）。再生は自前のスケジューラ |
 | 保存 | まだ無い（起動するたびにサンプル曲「スケッチ 03」を開く） |
 
 ## 画面構成
@@ -160,7 +160,8 @@
 ## 音
 
 - トラックごとに AVAudioUnitSampler を1つ持ち、トラックの GM 音色（プログラム番号）を読み込む。音量・パンはトラックの Vol／Pan を反映
-- 音源：Mac は macOS 標準の音源（gs_instruments.dls）、iPad は同梱の GeneralUser GS。GeneralUser GS は AVAudioUnitSampler で再生すると落ちることがあるため、Mac では使わない（[ROADMAP.md](ROADMAP.md)）
+- 音源：同梱の FluidR3_GM（iPad と Mac で共通）。無いときは、Mac だけ macOS 標準の音源（gs_instruments.dls）で鳴らす
+- GeneralUser GS は AVAudioUnitSampler で再生すると落ちることがあったため使わない（v2.0.0〜v2.0.3 で再現。FluidR3_GM と macOS 標準の音源では再現しない）
 - 鍵盤を押すと選択中のトラックの音色で鳴り、離すと止まる（ミュート・ソロは鍵盤の音には効かない）
 - 新しいトラックの初期音色はピアノ（GM 0）
 - 音色は起動時に専用のキューで読み込む（エンジンが動いている間に読み込むと落ちることがあるため）。音源が無いときは鳴らさずログを出す
