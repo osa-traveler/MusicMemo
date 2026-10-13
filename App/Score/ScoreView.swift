@@ -78,7 +78,7 @@ struct ScoreView: View {
         ScrollView(.horizontal) {
             VStack(spacing: 0) {
                 ForEach(store.sketch.tracks) { track in
-                    StaffRowView(track: track, layout: layout, rowHeight: rowHeight)
+                    StaffRowView(track: track, key: store.sketch.key, layout: layout, rowHeight: rowHeight)
                         .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                 }
             }

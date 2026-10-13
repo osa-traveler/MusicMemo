@@ -4,9 +4,24 @@ import Testing
 struct StaffTests {
     @Test func spellingInCMajor() {
         #expect(SpelledPitch(60, in: .cMajor) == SpelledPitch(letter: 0, alter: 0, octave: 4))   // C4
-        #expect(SpelledPitch(61, in: .cMajor) == SpelledPitch(letter: 0, alter: 1, octave: 4))   // C#4
+        #expect(SpelledPitch(61, in: .cMajor) == SpelledPitch(letter: 1, alter: -1, octave: 4))  // Db4
         #expect(SpelledPitch(71, in: .cMajor) == SpelledPitch(letter: 6, alter: 0, octave: 4))   // B4
         #expect(SpelledPitch(72, in: .cMajor) == SpelledPitch(letter: 0, alter: 0, octave: 5))   // C5
+    }
+
+    @Test func chromaticSpellingByDegree() {
+        // C major：♭III ♭VI ♭VII は♭、♯IV は♯
+        #expect(SpelledPitch(63, in: .cMajor) == SpelledPitch(letter: 2, alter: -1, octave: 4))  // Eb4
+        #expect(SpelledPitch(66, in: .cMajor) == SpelledPitch(letter: 3, alter: 1, octave: 4))   // F#4
+        #expect(SpelledPitch(68, in: .cMajor) == SpelledPitch(letter: 5, alter: -1, octave: 4))  // Ab4
+        #expect(SpelledPitch(70, in: .cMajor) == SpelledPitch(letter: 6, alter: -1, octave: 4))  // Bb4
+        // A minor：導音は G#、♯VI は F#
+        let aMinor = Key(tonic: 9, mode: .minor)
+        #expect(SpelledPitch(68, in: aMinor) == SpelledPitch(letter: 4, alter: 1, octave: 4))    // G#4
+        #expect(SpelledPitch(66, in: aMinor) == SpelledPitch(letter: 3, alter: 1, octave: 4))    // F#4
+        #expect(SpelledPitch(70, in: aMinor) == SpelledPitch(letter: 6, alter: -1, octave: 4))   // Bb4（♭II）
+        // D major：♭VII は幹音の C
+        #expect(SpelledPitch(72, in: Key(tonic: 2, mode: .major)) == SpelledPitch(letter: 0, alter: 0, octave: 5))
     }
 
     @Test func spellingFollowsKey() {

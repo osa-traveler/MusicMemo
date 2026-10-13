@@ -17,7 +17,17 @@ public struct SpelledPitch: Hashable, Sendable {
 
     static let letterPitchClasses = [0, 2, 4, 5, 7, 9, 11]
 
-    /// 調に合わせて綴る。調の音階音は調号どおり、それ以外は調の向き（♯系／♭系）に合わせる。
+    /// 音階外の音を♭で書くか（主音からの半音数で決める）。
+    static func prefersFlat(_ pitchClass: PitchClass, in key: Key) -> Bool {
+        let interval = Pitch.mod12(pitchClass - key.tonic)
+        switch key.mode {
+        case .major: return interval != 6           // ♭II ♭III ♭VI ♭VII は♭、♯IV は♯
+        case .minor: return interval == 1           // ♭II は♭、♯IV ♯VI ♯VII と長3度は♯
+        }
+    }
+
+    /// 調に合わせて綴る。調の音階音は調号どおり。音階外の音は幹音で書けるならそのまま、
+    /// 書けなければ主音からの度数で♯／♭を決める（長調は♯IVだけ♯、短調は♭IIだけ♭）。
     public init(_ note: MIDINote, in key: Key) {
         let signature = KeySignature(key)
         let pc = Pitch.pitchClass(of: note)
@@ -28,7 +38,7 @@ public struct SpelledPitch: Hashable, Sendable {
         }
         let chosen = candidates.first { signature.alter(forLetter: $0.letter) == $0.alter }
             ?? candidates.first { $0.alter == 0 }
-            ?? candidates.first { key.prefersFlats ? $0.alter < 0 : $0.alter > 0 }
+            ?? candidates.first { Self.prefersFlat(pc, in: key) ? $0.alter < 0 : $0.alter > 0 }
             ?? candidates[0]
         let octave = (note - Self.letterPitchClasses[chosen.letter] - chosen.alter) / 12 - 1
         self.init(letter: chosen.letter, alter: chosen.alter, octave: octave)

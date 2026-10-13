@@ -1,18 +1,24 @@
 import MusicMemoCore
 import SwiftUI
 
-/// 1トラック分の五線（横スクロールするコンテンツ）。小節線・拍子記号を描く。
+/// 1トラック分の五線（横スクロールするコンテンツ）。小節線・拍子記号・音符を描く。
 struct StaffRowView: View {
     let track: Track
+    let key: Key
     let layout: ScoreLayout
     let rowHeight: CGFloat
 
     var body: some View {
+        let chords = Notation.chords(for: track.notes, clef: track.clef, key: key, timeSignature: layout.timeSignature)
         Canvas { context, size in
             let bottom = layout.bottomLineY(rowHeight: size.height)
             StaffDrawing.staffLines(from: 0, to: size.width, bottomLineY: bottom, layout: layout, in: context)
             drawBarLines(bottomLineY: bottom, in: context)
             drawTimeSignature(bottomLineY: bottom, in: context)
+            let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
+            for chord in chords {
+                notes.draw(chord, in: context)
+            }
         }
         .frame(width: layout.contentWidth, height: rowHeight)
     }
