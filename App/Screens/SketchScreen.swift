@@ -23,11 +23,7 @@ struct SketchScreen: View {
     }
 
     private var topBar: some View {
-        placeholder("トップバー")
-            .frame(height: Metrics.topBarHeight)
-            .frame(maxWidth: .infinity)
-            .background(Palette.paper)
-            .overlay(alignment: .bottom) { Palette.rule.frame(height: 1) }
+        TopBarView(sketch: store.sketch, onToggleLoop: store.toggleLoop)
     }
 
     private var sectionRow: some View {

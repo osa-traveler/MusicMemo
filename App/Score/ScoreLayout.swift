@@ -81,6 +81,27 @@ struct ScoreLayout {
         return barLineX(bar: bar) + barLead + CGFloat(inBar) * pointsPerTick
     }
 
+    /// 再生範囲の端の x。小節頭なら小節線、それ以外は音符の位置（基準画面の再生範囲と点線に合わせる）。
+    func boundaryX(tick: Tick) -> CGFloat {
+        let ticksPerBar = timeSignature.ticksPerBar
+        if tick % ticksPerBar == 0 {
+            return barLineX(bar: tick / ticksPerBar + 1)
+        }
+        return x(tick: tick)
+    }
+
+    /// boundaryX の逆。曲の終わり（最終小節の終わりの小節線）も選べる。
+    func boundaryTick(atContentX x: CGFloat, grid: Tick) -> Tick {
+        if x >= barLineX(bar: barCount + 1) - barTrail {
+            return barCount * timeSignature.ticksPerBar
+        }
+        let bar = bar(atContentX: x)
+        let inBar = (x - barLineX(bar: bar) - barLead) / pointsPerTick
+        let clamped = min(max(inBar, 0), CGFloat(timeSignature.ticksPerBar))
+        let snapped = Int((clamped / CGFloat(grid)).rounded()) * grid
+        return timeSignature.startTick(ofBar: bar) + snapped
+    }
+
     /// コンテンツ座標の x に最も近い位置（grid 単位に丸める）。小節線〜1拍目の余白は1拍目に寄せる。
     func tick(atContentX x: CGFloat, grid: Tick) -> Tick {
         let bar = bar(atContentX: x)

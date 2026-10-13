@@ -20,11 +20,12 @@ struct ScoreView: View {
     var body: some View {
         let layout = layout
         VStack(spacing: 0) {
-            // 再生範囲バー（Step 3b）の場所
             headerRow(height: Metrics.playRangeBarHeight) {
-                Color.clear
+                PlayRangeHeaderView(range: store.sketch.playRange, timeSignature: store.sketch.timeSignature)
             } content: {
-                Color.clear
+                PlayRangeView(layout: layout, offset: horizontalOffset, range: store.sketch.playRange, isLooping: store.sketch.isLooping) {
+                    store.setPlayRange(start: $0, end: $1)
+                }
             }
 
             headerRow(height: Metrics.rulerHeight) {
@@ -47,7 +48,7 @@ struct ScoreView: View {
                 .scrollIndicators(.hidden)
             }
         }
-        .overlay { editPositionLine(layout: layout) }
+        .overlay { positionLines(layout: layout) }
         .padding(.trailing, Metrics.verticalScrollbarWidth)
     }
 
@@ -63,12 +64,25 @@ struct ScoreView: View {
         .background(Palette.paperMuted)
     }
 
-    /// 赤い編集位置ライン（ルーラの三角の下から全トラックの最下部まで）。音部記号の領域に入ったら隠す。
-    private func editPositionLine(layout: ScoreLayout) -> some View {
+    /// 再生範囲の青い点線（ルーラから全トラックを貫く）と、赤い編集位置ライン（ルーラの三角の下から最下部まで）。
+    /// 音部記号の領域に入ったら隠す。
+    private func positionLines(layout: ScoreLayout) -> some View {
         Canvas { context, size in
+            let visible = { (x: CGFloat) in x >= layout.stickyWidth - 1 && x <= size.width }
+
+            let rulerTop = Metrics.playRangeBarHeight
+            var dashes = Path()
+            for tick in [store.sketch.playRange.lowerBound, store.sketch.playRange.upperBound] {
+                let x = layout.boundaryX(tick: tick) - horizontalOffset
+                guard visible(x) else { continue }
+                dashes.move(to: CGPoint(x: x + 0.5, y: rulerTop))
+                dashes.addLine(to: CGPoint(x: x + 0.5, y: size.height))
+            }
+            context.stroke(dashes, with: .color(Palette.accent.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+
             let x = layout.x(tick: store.editor.editPosition) - horizontalOffset
-            guard x >= layout.stickyWidth, x <= size.width else { return }
-            let top = Metrics.playRangeBarHeight + 14
+            guard visible(x) else { return }
+            let top = rulerTop + 14
             context.fill(Path(CGRect(x: x - 1, y: top, width: 2, height: size.height - top)), with: .color(Palette.playhead))
         }
         .padding(.leading, Metrics.trackHeaderWidth)

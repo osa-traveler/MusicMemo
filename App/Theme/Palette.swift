@@ -19,6 +19,8 @@ enum Palette {
     static let ruleSoft = Color(hex: 0xE4E6EA)
 
     static let accent = Color(hex: 0x2F5BEA)
+    /// 青い帯の上の文字（再生範囲のラベル）。
+    static let accentDeep = Color(hex: 0x1E3FB0)
     static let accentTint = Color(hex: 0xEAF0FE)
     static let accentTintStrong = Color(hex: 0xDCE5FD)
 
