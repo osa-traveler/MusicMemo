@@ -7,11 +7,15 @@ public struct NotatedHead: Hashable, Sendable {
     public var accidental: Int?
     /// 長2度でぶつかるため符幹の反対側にずらすか。
     public var isDisplaced: Bool
+    /// 次の同じ音高の音へタイでつなぐか。
+    public var tiesToNext: Bool = false
 }
 
 /// 同じ開始位置の音符をまとめたもの（単音・和音・休符）。
 public struct NotatedChord: Hashable, Sendable {
     public var start: Tick
+    /// 終わりの位置（タイの行き先を探すのに使う）。
+    public var end: Tick
     public var value: NoteDuration
     /// 低い順。休符なら空。
     public var heads: [NotatedHead]
@@ -54,24 +58,89 @@ public enum Notation {
             let pitches = Set(group.compactMap(\.pitch)).sorted()
 
             guard !pitches.isEmpty else {
-                result.append(NotatedChord(start: start, value: value, heads: [], stemUp: true))
+                result.append(NotatedChord(start: start, end: start + duration, value: value, heads: [], stemUp: true))
                 continue
             }
 
+            let tiedPitches = Set(group.filter(\.tiesToNext).compactMap(\.pitch))
             var heads: [NotatedHead] = pitches.map { pitch in
                 let spelled = SpelledPitch(pitch, in: key)
                 let step = spelled.diatonicStep
                 let current = alterations[step] ?? signature.alter(forLetter: spelled.letter)
                 let accidental: Int? = spelled.alter == current ? nil : spelled.alter
                 alterations[step] = spelled.alter
-                return NotatedHead(pitch: pitch, staffPosition: clef.staffPosition(of: spelled), accidental: accidental, isDisplaced: false)
+                return NotatedHead(pitch: pitch, staffPosition: clef.staffPosition(of: spelled), accidental: accidental,
+                                   isDisplaced: false, tiesToNext: tiedPitches.contains(pitch))
             }
 
             let stemUp = stemDirectionUp(positions: heads.map(\.staffPosition))
             displaceSeconds(&heads, stemUp: stemUp)
-            result.append(NotatedChord(start: start, value: value, heads: heads, stemUp: stemUp))
+            result.append(NotatedChord(start: start, end: start + duration, value: value, heads: heads, stemUp: stemUp))
         }
         return result
+    }
+
+    /// 連桁でつなぐ音符のまとまり（chords の添字）。同じ拍の中で続く8分・16分（休符で区切る）を2つ以上まとめる。
+    /// まとまりの符幹の向きは、まとまり全体で真ん中の線から一番遠い音で決め、各音符に反映する。
+    public static func beamGroups(_ chords: inout [NotatedChord], timeSignature: TimeSignature) -> [[Int]] {
+        var groups: [[Int]] = []
+        var current: [Int] = []
+        var currentBeat: Int?
+
+        func flush() {
+            if current.count >= 2 { groups.append(current) }
+            current = []
+            currentBeat = nil
+        }
+
+        for (index, chord) in chords.enumerated() {
+            let beamable = !chord.isRest && chord.value.flagCount > 0
+            guard beamable else {
+                flush()
+                continue
+            }
+            let beat = chord.start / timeSignature.ticksPerBeat
+            let continues = currentBeat == beat && current.last.map { chords[$0].end == chord.start } == true
+            if !continues { flush() }
+            current.append(index)
+            currentBeat = beat
+        }
+        flush()
+
+        for group in groups {
+            let positions = group.flatMap { chords[$0].heads.map(\.staffPosition) }
+            let stemUp = stemDirectionUp(positions: positions)
+            for index in group {
+                chords[index].stemUp = stemUp
+                for headIndex in chords[index].heads.indices { chords[index].heads[headIndex].isDisplaced = false }
+                displaceSeconds(&chords[index].heads, stemUp: stemUp)
+            }
+        }
+        return groups
+    }
+
+    /// 3連符のまとまり（chords の添字）。続く3連符を、合計が元の音価2つ分になるごとに区切る。
+    public static func tupletGroups(_ chords: [NotatedChord]) -> [[Int]] {
+        var groups: [[Int]] = []
+        var current: [Int] = []
+        var total: Tick = 0
+        for (index, chord) in chords.enumerated() {
+            guard chord.value.isTriplet, current.isEmpty || chords[current.last!].end == chord.start else {
+                current = []
+                total = 0
+                if chord.value.isTriplet { current = [index]; total = chord.value.ticks }
+                continue
+            }
+            current.append(index)
+            total += chord.value.ticks
+            let span = chords[current[0]].value.value.ticks * 2
+            if total >= span {
+                groups.append(current)
+                current = []
+                total = 0
+            }
+        }
+        return groups
     }
 
     /// 真ん中の線から一番遠い音で決める。真ん中の線上や上下同じ距離なら下向き。

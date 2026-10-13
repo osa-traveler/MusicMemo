@@ -23,6 +23,17 @@ enum DebugInputDemo {
         // 2分で D5 を入れてから、戻って消す
         store.keyDown(74); store.keyUp(74)
         store.backspace()
+        // 8.3：16分×2＋8分（連桁）、9小節目：3連8分×3、8分＋16分×2
+        store.selectNoteValue(.sixteenth)
+        for pitch in [72, 74] { store.keyDown(pitch); store.keyUp(pitch) }
+        store.selectNoteValue(.eighth)
+        store.keyDown(76); store.keyUp(76)
+        store.toggleTriplet()
+        for pitch in [77, 76, 74] { store.keyDown(pitch); store.keyUp(pitch) }
+        store.toggleTriplet()
+        store.keyDown(72); store.keyUp(72)
+        store.selectNoteValue(.sixteenth)
+        for pitch in [71, 69] { store.keyDown(pitch); store.keyUp(pitch) }
     }
 }
 #endif

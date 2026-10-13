@@ -12,8 +12,10 @@ struct StaffRowView: View {
     private var isSelected: Bool { editor.selectedTrackID == track.id }
 
     var body: some View {
-        let chords = Notation.chords(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
-        Canvas { context, size in
+        var chords = Notation.chords(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
+        let beamGroups = Notation.beamGroups(&chords, timeSignature: layout.timeSignature)
+        let tuplets = Notation.tupletGroups(chords)
+        Canvas { [chords] context, size in
             let bottom = layout.bottomLineY(rowHeight: size.height)
             if isSelected {
                 drawInputBar(rowHeight: size.height, in: context)
@@ -28,8 +30,19 @@ struct StaffRowView: View {
                 drawChordSymbols(bottomLineY: bottom, in: context)
             }
             let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
-            for chord in chords {
+            let beamed = Set(beamGroups.joined())
+            for (index, chord) in chords.enumerated() where !beamed.contains(index) {
                 notes.draw(chord, in: context)
+            }
+            for group in beamGroups {
+                notes.drawBeamGroup(group.map { chords[$0] }, in: context)
+            }
+            let chordsByStart = Dictionary(chords.map { ($0.start, $0) }, uniquingKeysWith: { first, _ in first })
+            for chord in chords where chord.heads.contains(where: \.tiesToNext) {
+                notes.drawTies(chord, next: chordsByStart[chord.end], in: context)
+            }
+            for group in tuplets {
+                notes.drawTuplet(group.map { chords[$0] }, in: context)
             }
             if isSelected {
                 drawPreviewNote(bottomLineY: bottom, in: context)

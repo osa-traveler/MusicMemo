@@ -87,3 +87,47 @@ struct NotationTests {
         #expect(chords.map(\.stemUp) == [true, true, false, false, false, true])
     }
 }
+
+struct BeamAndTupletTests {
+    let time = TimeSignature.common
+
+    func chords(_ notes: [Note]) -> [NotatedChord] {
+        Notation.chords(for: notes, clef: .treble, key: .cMajor, timeSignature: time)
+    }
+
+    @Test func beamsEighthsWithinBeat() {
+        // 1拍目に8分×2、2拍目に8分×2、3拍目は4分 → 2つのまとまり
+        var list = chords([
+            Note(start: 0, duration: 240, pitch: 64), Note(start: 240, duration: 240, pitch: 65),
+            Note(start: 480, duration: 240, pitch: 67), Note(start: 720, duration: 240, pitch: 69),
+            Note(start: 960, duration: 480, pitch: 71),
+        ])
+        #expect(Notation.beamGroups(&list, timeSignature: time) == [[0, 1], [2, 3]])
+    }
+
+    @Test func restBreaksBeam() {
+        var list = chords([
+            Note(start: 0, duration: 240, pitch: 64), .rest(start: 240, duration: 240),
+        ])
+        #expect(Notation.beamGroups(&list, timeSignature: time).isEmpty)
+    }
+
+    @Test func groupStemDirection() {
+        // E4（真ん中の線から4段下）と A5（6段上）：A5 の方が遠い → まとまり全体で下向き
+        var list = chords([Note(start: 0, duration: 240, pitch: 64), Note(start: 240, duration: 240, pitch: 81)])
+        _ = Notation.beamGroups(&list, timeSignature: time)
+        #expect(list.map(\.stemUp) == [false, false])
+    }
+
+    @Test func tiesAreCarried() {
+        let list = chords([Note(start: 0, duration: 480, pitch: 64, tiesToNext: true), Note(start: 480, duration: 480, pitch: 64)])
+        #expect(list[0].heads[0].tiesToNext)
+        #expect(list[0].end == 480)
+    }
+
+    @Test func tripletGroups() {
+        let triplet = NoteDuration(.eighth, triplet: true).ticks  // 160
+        let notes = (0..<6).map { Note(start: $0 * triplet, duration: triplet, pitch: 64) }
+        #expect(Notation.tupletGroups(chords(notes)) == [[0, 1, 2], [3, 4, 5]])
+    }
+}
