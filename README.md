@@ -36,6 +36,7 @@ open MusicMemo.xcodeproj
 - SoundFont が無くてもビルド・起動はできる（iPad は音が鳴らない。Mac は macOS 標準の音源で鳴る）
 - `.xcodeproj` は生成物なのでリポジトリに含めていない。ファイルを追加・削除したら `xcodegen generate` をやり直す
 - モデル層のテスト：`cd Packages/MusicMemoCore && swift test`
+- 画面の撮影（開発用、Mac）：`Scripts/snapshot.sh 出力.png [倍率] [入力デモ 0/1]`
 
 ## 構成
 
