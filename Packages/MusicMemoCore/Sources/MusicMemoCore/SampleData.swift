@@ -65,12 +65,13 @@ public enum SampleData {
         )
     }
 
-    /// 基準画面の画面状態：編集位置 7.1.1、メロディトラック選択、4分音符。
+    /// 基準画面の画面状態：編集位置 7.1.1、メロディトラック選択、4分音符、プレビュー F4。
     public static func editorState(for sketch: Sketch) -> EditorState {
         EditorState(
             editPosition: sketch.timeSignature.tick(of: BarPosition(bar: 7)),
             selectedTrackID: sketch.tracks.first?.id,
-            duration: NoteDuration(.quarter)
+            duration: NoteDuration(.quarter),
+            previewPitch: 65
         )
     }
 }

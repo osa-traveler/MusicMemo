@@ -4,23 +4,69 @@ import SwiftUI
 /// 1トラック分の五線（横スクロールするコンテンツ）。小節線・拍子記号・音符を描く。
 struct StaffRowView: View {
     let track: Track
-    let key: Key
+    let sketch: Sketch
+    let editor: EditorState
     let layout: ScoreLayout
     let rowHeight: CGFloat
 
+    private var isSelected: Bool { editor.selectedTrackID == track.id }
+
     var body: some View {
-        let chords = Notation.chords(for: track.notes, clef: track.clef, key: key, timeSignature: layout.timeSignature)
+        let chords = Notation.chords(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
         Canvas { context, size in
             let bottom = layout.bottomLineY(rowHeight: size.height)
+            if isSelected {
+                drawInputBar(rowHeight: size.height, in: context)
+            }
             StaffDrawing.staffLines(from: 0, to: size.width, bottomLineY: bottom, layout: layout, in: context)
             drawBarLines(bottomLineY: bottom, in: context)
             drawTimeSignature(bottomLineY: bottom, in: context)
+            if track.showsChordSymbols {
+                drawChordSymbols(bottomLineY: bottom, in: context)
+            }
             let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
             for chord in chords {
                 notes.draw(chord, in: context)
             }
+            if isSelected {
+                drawPreviewNote(bottomLineY: bottom, in: context)
+            }
         }
         .frame(width: layout.contentWidth, height: rowHeight)
+    }
+
+    /// 入力中の小節（編集位置の小節）を薄い青で塗る。
+    private func drawInputBar(rowHeight: CGFloat, in context: GraphicsContext) {
+        let bar = layout.timeSignature.bar(containing: editor.editPosition)
+        let rect = layout.inputBarRect(bar: bar, rowHeight: rowHeight)
+        context.fill(Path(roundedRect: rect, cornerRadius: 6 * layout.zoom), with: .color(Palette.accent.opacity(0.08)))
+    }
+
+    /// コードトラックの五線の上にコードネーム（オレンジ）。
+    private func drawChordSymbols(bottomLineY: CGFloat, in context: GraphicsContext) {
+        let baselineY = layout.y(staffPosition: 8, bottomLineY: bottomLineY) - layout.chordSymbolOffset
+        for event in sketch.chords {
+            let text = context.resolve(
+                Text(event.chord.symbol)
+                    .font(.system(size: 15 * layout.zoom, weight: .bold))
+                    .foregroundStyle(Palette.chord)
+            )
+            let size = text.measure(in: CGSize(width: CGFloat.infinity, height: .infinity))
+            let origin = CGPoint(x: layout.x(tick: event.start) + layout.chordSymbolLeading,
+                                 y: baselineY - text.firstBaseline(in: size))
+            context.draw(text, in: CGRect(origin: origin, size: size))
+        }
+    }
+
+    /// 入力予定の音符（半透明の青）。
+    private func drawPreviewNote(bottomLineY: CGFloat, in context: GraphicsContext) {
+        guard let pitch = editor.previewPitch else { return }
+        let note = Note(start: editor.editPosition, duration: editor.duration.ticks, pitch: pitch)
+        let preview = Notation.chords(for: [note], clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
+        let drawing = NoteDrawing(layout: layout, bottomLineY: bottomLineY, color: Palette.accent.opacity(0.45))
+        for chord in preview {
+            drawing.draw(chord, in: context)
+        }
     }
 
     private func drawBarLines(bottomLineY: CGFloat, in context: GraphicsContext) {

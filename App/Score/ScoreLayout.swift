@@ -19,6 +19,15 @@ struct ScoreLayout {
     /// コードネームのベースライン（第5線からの距離）。
     var chordSymbolOffset: CGFloat { 16 * zoom }
 
+    /// 入力中の小節の塗り（行内の上下位置）。
+    func inputBarRect(bar: Int, rowHeight: CGFloat) -> CGRect {
+        let top = (rowHeight - minimumRowHeight) / 2 + 14 * zoom
+        return CGRect(x: barLineX(bar: bar) + 2 * zoom, y: top, width: barWidth - 4 * zoom, height: 74 * zoom)
+    }
+
+    /// コードネームの左端（音符の位置からの距離）。
+    var chordSymbolLeading: CGFloat { -10 * zoom }
+
     /// 行の高さに応じた第1線（一番下の線）の y。余った高さは上下に均等に配る。
     func bottomLineY(rowHeight: CGFloat) -> CGFloat {
         (rowHeight - minimumRowHeight) / 2 + baseTopLineY + staffSpace * 4
