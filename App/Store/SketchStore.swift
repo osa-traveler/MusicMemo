@@ -59,6 +59,20 @@ final class SketchStore {
         scroll(toLeadingBar: bar)
     }
 
+    /// 小節を選ぶ（全体ビューのカード）。編集位置を小節の頭へ移し、見えていなければスクロールする。
+    func select(bar: Int) {
+        setEditPosition(sketch.timeSignature.startTick(ofBar: bar))
+        if !visibleBars.contains(bar) {
+            scroll(toLeadingBar: bar)
+        }
+    }
+
+    /// 譜面を指定の横スクロール量へ（範囲内に収める）。
+    func scrollStaff(toOffset offset: CGFloat) {
+        let maxOffset = max(layout.contentWidth - visibleStaffWidth, 0)
+        horizontalPosition.scrollTo(x: min(max(offset, 0), maxOffset))
+    }
+
     func selectTrack(_ id: Track.ID) {
         editor.selectedTrackID = id
     }

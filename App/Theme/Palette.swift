@@ -15,6 +15,8 @@ enum Palette {
     static let ruleStrong = Color(hex: 0xC9CDD3)
     /// ルーラの8分の目盛り。
     static let rulerEighth = Color(hex: 0xA9AEB6)
+    /// 全体ビューの空の小節カード。
+    static let cardEmpty = Color(hex: 0xF4F5F7)
     /// トラック行の区切り線。
     static let ruleSoft = Color(hex: 0xE4E6EA)
 

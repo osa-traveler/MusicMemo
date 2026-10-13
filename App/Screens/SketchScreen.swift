@@ -39,10 +39,8 @@ struct SketchScreen: View {
     }
 
     private var overview: some View {
-        placeholder("全体ビュー")
-            .frame(maxWidth: .infinity)
-            .frame(height: Metrics.overviewHeight)
-            .background(Palette.accentTint.opacity(0.5), in: .rect(cornerRadius: 8))
+        OverviewView(store: store)
+            .frame(height: Metrics.overviewHeight, alignment: .bottom)
             .padding(.leading, Metrics.trackHeaderWidth)
             .padding(.trailing, Metrics.verticalScrollbarWidth)
     }
