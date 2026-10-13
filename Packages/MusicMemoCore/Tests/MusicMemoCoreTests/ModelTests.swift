@@ -25,6 +25,11 @@ struct ModelTests {
         #expect(track.pan == -64)
     }
 
+    @Test func newTrackDefaultsToPiano() {
+        let track = Track(name: "New", role: .other, color: .gray)
+        #expect(track.program == 0)  // GM 0 = Acoustic Grand Piano
+    }
+
     @Test func rest() {
         let rest = Note.rest(start: 0, duration: 480)
         #expect(rest.isRest)

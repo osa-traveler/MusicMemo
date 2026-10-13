@@ -4,3 +4,6 @@ xcuserdata/
 DerivedData/
 .build/
 .swiftpm/
+
+# SoundFont はリポジトリに含めない（Scripts/fetch-soundfont.sh で取得）
+App/Resources/SoundFonts/*.sf2

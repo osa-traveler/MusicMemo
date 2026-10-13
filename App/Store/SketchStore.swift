@@ -42,9 +42,13 @@ final class SketchStore {
     /// トラックごとの鍵盤の表示範囲（左端の C の MIDI ノート番号）。
     private var keyboardLowestC: [Track.ID: MIDINote] = [:]
 
+    /// 鍵盤の音。
+    private let sound = SoundEngine()
+
     init(sketch: Sketch = SampleData.sketch03()) {
         self.sketch = sketch
         self.editor = SampleData.editorState(for: sketch)
+        sound.prepare(sketch.tracks)
         #if DEBUG
         // 開発用：MUSICMEMO_ZOOM=2 などで起動時の倍率を指定する（ズーム時の画面確認用）
         if let zoom = ProcessInfo.processInfo.environment["MUSICMEMO_ZOOM"].flatMap(Double.init) {
@@ -211,6 +215,7 @@ final class SketchStore {
     func keyDown(_ pitch: MIDINote, addToChord: Bool = false) {
         editor.previewPitch = pitch
         heldKeys.insert(pitch)
+        if let id = editor.selectedTrackID { sound.noteOn(pitch, track: id) }
         guard inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
 
         if let range = pendingEntry ?? (addToChord ? lastEntry : nil) {
@@ -237,6 +242,7 @@ final class SketchStore {
     /// 鍵を離した。全部離したら編集位置を入力した音の終わりへ進める。
     func keyUp(_ pitch: MIDINote) {
         heldKeys.remove(pitch)
+        if let id = editor.selectedTrackID { sound.noteOff(pitch, track: id) }
         guard heldKeys.isEmpty, let range = pendingEntry else { return }
         pendingEntry = nil
         lastEntry = range
@@ -351,5 +357,6 @@ final class SketchStore {
     private func updateTrack(_ id: Track.ID, _ change: (inout Track) -> Void) {
         guard let index = sketch.tracks.firstIndex(where: { $0.id == id }) else { return }
         change(&sketch.tracks[index])
+        sound.prepare([sketch.tracks[index]])
     }
 }

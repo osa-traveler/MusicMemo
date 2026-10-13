@@ -37,6 +37,8 @@ public enum TrackColor: String, CaseIterable, Codable, Sendable {
 public struct Track: Identifiable, Hashable, Codable, Sendable {
     public static let volumeRange = 0...100
     public static let panRange = -64...63
+    /// 新しいトラックの音色（GM 0 = Acoustic Grand Piano）。
+    public static let defaultProgram = 0
 
     public var id: UUID
     /// 楽器名（Piano, E.Piano …）。
@@ -62,7 +64,7 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
         pan: Int = 0,
         isMuted: Bool = false,
         isSoloed: Bool = false,
-        program: Int = 0,
+        program: Int = Track.defaultProgram,
         notes: [Note] = []
     ) {
         self.id = id
