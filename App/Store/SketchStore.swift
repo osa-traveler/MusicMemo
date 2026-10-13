@@ -19,6 +19,24 @@ final class SketchStore {
     /// 譜面に見えているトラック数（縦スクロール）。
     var visibleTrackCount = 0
 
+    // 元に戻す／やり直す（曲データと編集位置の組を積む）
+    private struct Snapshot {
+        var sketch: Sketch
+        var editPosition: Tick
+    }
+    private var undoStack: [Snapshot] = []
+    private var redoStack: [Snapshot] = []
+    var canUndo: Bool { !undoStack.isEmpty }
+    var canRedo: Bool { !redoStack.isEmpty }
+
+    // 鍵盤入力の途中経過
+    /// いま押されている鍵。
+    private(set) var heldKeys: Set<MIDINote> = []
+    /// 押している最中の入力（全部の鍵を離したら編集位置をその終わりへ進める）。
+    private var pendingEntry: Range<Tick>?
+    /// 直前に確定した入力（⇧クリックで音を重ねる先）。
+    private var lastEntry: Range<Tick>?
+
     // 入力パレット
     var inputMethod: InputMethod = .keyboard
     /// トラックごとの鍵盤の表示範囲（左端の C の MIDI ノート番号）。
@@ -185,6 +203,116 @@ final class SketchStore {
     func shiftKeyboard(octaves: Int) {
         guard let id = selectedTrack?.id else { return }
         keyboardLowestC[id] = min(max(keyboardLowestNote + octaves * 12, 24), 96)
+    }
+
+    // MARK: 入力（上書き方式）
+
+    /// 鍵を押した。押している鍵が無ければ新しい音として入力し、他の鍵を押している間や addToChord のときは和音に重ねる。
+    func keyDown(_ pitch: MIDINote, addToChord: Bool = false) {
+        editor.previewPitch = pitch
+        heldKeys.insert(pitch)
+        guard inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+
+        if let range = pendingEntry ?? (addToChord ? lastEntry : nil) {
+            // 和音に重ねる（押している途中の入力は同じ取り消し単位にまとめる）
+            if pendingEntry == nil { recordUndo() }
+            NoteEditing.addToChord(pitch: pitch, range: range, in: &sketch.tracks[trackIndex], timeSignature: sketch.timeSignature)
+            return
+        }
+
+        recordUndo()
+        let range = NoteEditing.enter(
+            pitches: [pitch],
+            at: editor.editPosition,
+            duration: editor.duration.ticks,
+            tieFromPrevious: editor.isTieOn,
+            in: &sketch.tracks[trackIndex],
+            timeSignature: sketch.timeSignature,
+            totalTicks: sketch.totalTicks
+        )
+        editor.isTieOn = false  // タイは1回使うと戻す
+        pendingEntry = range
+    }
+
+    /// 鍵を離した。全部離したら編集位置を入力した音の終わりへ進める。
+    func keyUp(_ pitch: MIDINote) {
+        heldKeys.remove(pitch)
+        guard heldKeys.isEmpty, let range = pendingEntry else { return }
+        pendingEntry = nil
+        lastEntry = range
+        advance(to: range.upperBound)
+    }
+
+    /// 休符を選択中の音価で入力して進める。
+    func enterRest() {
+        guard inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+        recordUndo()
+        let range = NoteEditing.enter(
+            pitches: [],
+            at: editor.editPosition,
+            duration: editor.duration.ticks,
+            in: &sketch.tracks[trackIndex],
+            timeSignature: sketch.timeSignature,
+            totalTicks: sketch.totalTicks
+        )
+        lastEntry = range
+        advance(to: range.upperBound)
+    }
+
+    /// 戻って消す：編集位置の直前の音符を消し、その位置へ戻る。
+    func backspace() {
+        guard let trackIndex = selectedTrackIndex else { return }
+        var track = sketch.tracks[trackIndex]
+        guard let start = NoteEditing.deleteBefore(editor.editPosition, in: &track) else { return }
+        recordUndo()
+        sketch.tracks[trackIndex] = track
+        lastEntry = nil
+        setEditPosition(start)
+        revealEditPosition()
+    }
+
+    func undo() {
+        guard let snapshot = undoStack.popLast() else { return }
+        redoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
+        restore(snapshot)
+    }
+
+    func redo() {
+        guard let snapshot = redoStack.popLast() else { return }
+        undoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
+        restore(snapshot)
+    }
+
+    private func restore(_ snapshot: Snapshot) {
+        sketch = snapshot.sketch
+        pendingEntry = nil
+        lastEntry = nil
+        setEditPosition(snapshot.editPosition)
+        revealEditPosition()
+    }
+
+    private func recordUndo() {
+        undoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
+        redoStack.removeAll()
+    }
+
+    private var selectedTrackIndex: Int? {
+        sketch.tracks.firstIndex { $0.id == editor.selectedTrackID }
+    }
+
+    private func advance(to tick: Tick) {
+        setEditPosition(tick)
+        revealEditPosition()
+    }
+
+    /// 編集位置が見えなくなったら、左から1/3あたりに来るようにスクロールする。
+    func revealEditPosition() {
+        let layout = layout
+        let x = layout.x(tick: editor.editPosition)
+        let visibleStart = horizontalOffset + layout.stickyWidth
+        let visibleEnd = horizontalOffset + visibleStaffWidth
+        guard visibleStaffWidth > 0, x < visibleStart + 8 || x > visibleEnd - 24 else { return }
+        scrollStaff(toOffset: x - layout.stickyWidth - (visibleStaffWidth - layout.stickyWidth) / 3)
     }
 
     /// 音価を選ぶ。付点・3連符はそのまま保つ。

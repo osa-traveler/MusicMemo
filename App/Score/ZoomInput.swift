@@ -58,11 +58,23 @@ extension FocusedValues {
     @Entry var sketchStore: SketchStore?
 }
 
-/// 表示メニュー：拡大／縮小／100%に戻す。
-struct ZoomCommands: Commands {
+/// メニュー：編集（元に戻す／やり直す／戻って消す）と表示（拡大／縮小／100%に戻す）。
+struct SketchCommands: Commands {
     @FocusedValue(\.sketchStore) private var store
 
     var body: some Commands {
+        CommandGroup(replacing: .undoRedo) {
+            Button("元に戻す") { store?.undo() }
+                .keyboardShortcut("z", modifiers: .command)
+                .disabled(store?.canUndo != true)
+            Button("やり直す") { store?.redo() }
+                .keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(store?.canRedo != true)
+            Divider()
+            Button("戻って消す") { store?.backspace() }
+                .keyboardShortcut(.delete, modifiers: [])
+                .disabled(store == nil)
+        }
         CommandGroup(after: .toolbar) {
             Button("拡大") { store?.stepZoom(1) }
                 .keyboardShortcut("+", modifiers: .command)

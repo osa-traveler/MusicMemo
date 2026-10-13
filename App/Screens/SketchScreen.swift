@@ -21,10 +21,14 @@ struct SketchScreen: View {
         .background(Palette.background)
         .foregroundStyle(Palette.ink)
         .focusedSceneValue(\.sketchStore, store)
+        #if DEBUG
+        .onAppear { DebugInputDemo.runIfRequested(store) }
+        #endif
     }
 
     private var topBar: some View {
-        TopBarView(sketch: store.sketch, onToggleLoop: store.toggleLoop)
+        TopBarView(sketch: store.sketch, canUndo: store.canUndo, canRedo: store.canRedo,
+                   onToggleLoop: store.toggleLoop, onUndo: store.undo, onRedo: store.redo)
     }
 
     private var sectionRow: some View {

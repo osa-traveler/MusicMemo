@@ -9,7 +9,7 @@ struct MusicMemoApp: App {
                 .onAppear { DebugSnapshot.scheduleIfRequested() }
                 #endif
         }
-        .commands { ZoomCommands() }
+        .commands { SketchCommands() }
         #if os(macOS)
         .defaultSize(width: 1194, height: 834)
         #endif

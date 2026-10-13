@@ -1,5 +1,8 @@
 import MusicMemoCore
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// 入力パレット（画面下部、高さ206）。左から 音価／音高（鍵盤）／入力方法。
 struct InputPaletteView: View {
@@ -7,10 +10,16 @@ struct InputPaletteView: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 18) {
-            DurationPadView(store: store)
+            DurationPadView(store: store, onRest: store.enterRest)
                 .frame(width: Metrics.durationBlockWidth)
-            PianoKeyboardBlock(store: store)
-                .frame(maxWidth: .infinity)
+            PianoKeyboardBlock(
+                store: store,
+                onKeyDown: { store.keyDown($0, addToChord: ModifierKeys.isShiftPressed) },
+                onKeyUp: store.keyUp,
+                onBackspace: store.backspace,
+                pressedKeys: store.heldKeys
+            )
+            .frame(maxWidth: .infinity)
             InputMethodView(store: store)
                 .frame(width: Metrics.inputMethodBlockWidth)
         }
@@ -20,6 +29,17 @@ struct InputPaletteView: View {
         .frame(maxWidth: .infinity)
         .background(Palette.paper)
         .overlay(alignment: .top) { Palette.rule.frame(height: 1) }
+    }
+}
+
+/// 押しているキーボードの修飾キー。Mac は ⇧クリックで和音に音を重ねる。
+enum ModifierKeys {
+    @MainActor static var isShiftPressed: Bool {
+        #if os(macOS)
+        NSEvent.modifierFlags.contains(.shift)
+        #else
+        false
+        #endif
     }
 }
 
