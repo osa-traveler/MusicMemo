@@ -28,7 +28,8 @@ struct SketchScreen: View {
 
     private var topBar: some View {
         TopBarView(sketch: store.sketch, canUndo: store.canUndo, canRedo: store.canRedo,
-                   onToggleLoop: store.toggleLoop, onUndo: store.undo, onRedo: store.redo)
+                   onToggleLoop: store.toggleLoop, onUndo: store.undo, onRedo: store.redo,
+                   onExport: { Exporter.export(store.sketch, format: $0) })
     }
 
     private var sectionRow: some View {

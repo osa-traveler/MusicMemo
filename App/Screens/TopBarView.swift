@@ -2,7 +2,7 @@ import MusicMemoCore
 import SwiftUI
 
 /// トップバー（高さ64）。戻る、曲名と曲の情報、再生／ループ／メトロノーム、元に戻す／やり直す、Logicへ書き出し。
-/// いまはループの切り替えと、元に戻す／やり直すが動く。
+/// いまはループの切り替え、元に戻す／やり直す、書き出しが動く。
 struct TopBarView: View {
     let sketch: Sketch
     let canUndo: Bool
@@ -10,6 +10,7 @@ struct TopBarView: View {
     let onToggleLoop: () -> Void
     let onUndo: () -> Void
     let onRedo: () -> Void
+    let onExport: (ExportFormat) -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -42,7 +43,11 @@ struct TopBarView: View {
                 .disabled(!canRedo)
                 .opacity(canRedo ? 1 : 0.35)
 
-            Button {} label: {
+            Menu {
+                ForEach(ExportFormat.allCases, id: \.self) { format in
+                    Button(format.title) { onExport(format) }
+                }
+            } label: {
                 Label("Logicへ書き出し", systemImage: "square.and.arrow.up")
                     .font(.system(size: 14, weight: .medium))
                     .padding(.horizontal, 14)
@@ -50,7 +55,10 @@ struct TopBarView: View {
                     .background(Palette.paper, in: .rect(cornerRadius: 10))
                     .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.ruleStrong, lineWidth: 1))
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
             .buttonStyle(.plain)
+            .fixedSize()
         }
         .padding(.horizontal, 16)
         .frame(height: Metrics.topBarHeight)
