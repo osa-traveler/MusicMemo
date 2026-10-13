@@ -50,8 +50,8 @@ public enum SampleData {
             tempo: 96,
             barCount: 16,
             sections: [
-                Section(name: "Aメロ", startBar: 1, barCount: 8),
-                Section(name: "サビ", startBar: 9, barCount: 8),
+                SongSection(name: "Aメロ", startBar: 1, barCount: 8),
+                SongSection(name: "サビ", startBar: 9, barCount: 8),
             ],
             chords: chords,
             tracks: [

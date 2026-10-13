@@ -5,20 +5,17 @@ import SwiftUI
 /// 左にトラック情報列（固定）、右に縦スクロール列。全トラックは同じ横位置でスクロールする。
 struct ScoreView: View {
     @Bindable var store: SketchStore
-    @State private var horizontalOffset: CGFloat = 0
-    @State private var horizontalPosition = ScrollPosition()
+    @State private var verticalPosition = ScrollPosition()
+    @State private var vertical = VerticalMetrics()
 
-    private var layout: ScoreLayout {
-        ScoreLayout(
-            zoom: store.editor.zoom,
-            timeSignature: store.sketch.timeSignature,
-            keySignature: KeySignature(store.sketch.key),
-            barCount: store.sketch.barCount
-        )
+    private struct VerticalMetrics: Equatable {
+        var offset: CGFloat = 0
+        var contentHeight: CGFloat = 0
+        var visibleHeight: CGFloat = 0
     }
-
     var body: some View {
-        let layout = layout
+        let layout = store.layout
+        let horizontalOffset = store.horizontalOffset
         VStack(spacing: 0) {
             headerRow(height: Metrics.playRangeBarHeight) {
                 PlayRangeHeaderView(range: store.sketch.playRange, timeSignature: store.sketch.timeSignature)
@@ -46,10 +43,27 @@ struct ScoreView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                .scrollPosition($verticalPosition)
+                .onScrollGeometryChange(for: VerticalMetrics.self) { geometry in
+                    VerticalMetrics(
+                        offset: geometry.contentOffset.y + geometry.contentInsets.top,
+                        contentHeight: geometry.contentSize.height,
+                        visibleHeight: geometry.containerSize.height
+                    )
+                } action: { _, metrics in
+                    vertical = metrics
+                }
             }
         }
         .overlay { positionLines(layout: layout) }
         .padding(.trailing, Metrics.verticalScrollbarWidth)
+        .overlay(alignment: .trailing) {
+            VerticalScrollbar(offset: vertical.offset, contentHeight: vertical.contentHeight, visibleHeight: vertical.visibleHeight) {
+                verticalPosition.scrollTo(y: $0)
+            }
+            .padding(.vertical, 6)
+            .padding(.trailing, 4)
+        }
     }
 
     /// 再生範囲バー・ルーラの1段（左にトラック情報列と同じ幅の見出し）。
@@ -73,14 +87,14 @@ struct ScoreView: View {
             let rulerTop = Metrics.playRangeBarHeight
             var dashes = Path()
             for tick in [store.sketch.playRange.lowerBound, store.sketch.playRange.upperBound] {
-                let x = layout.boundaryX(tick: tick) - horizontalOffset
+                let x = layout.boundaryX(tick: tick) - store.horizontalOffset
                 guard visible(x) else { continue }
                 dashes.move(to: CGPoint(x: x + 0.5, y: rulerTop))
                 dashes.addLine(to: CGPoint(x: x + 0.5, y: size.height))
             }
             context.stroke(dashes, with: .color(Palette.accent.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
 
-            let x = layout.x(tick: store.editor.editPosition) - horizontalOffset
+            let x = layout.x(tick: store.editor.editPosition) - store.horizontalOffset
             guard visible(x) else { return }
             let top = rulerTop + 14
             context.fill(Path(CGRect(x: x - 1, y: top, width: 2, height: size.height - top)), with: .color(Palette.playhead))
@@ -90,11 +104,10 @@ struct ScoreView: View {
     }
 
     /// 編集位置の小節が左から3小節目に来るように横スクロールする（基準画面：7小節目を 5〜8 の中で表示）。
-    private func scrollToEditPosition(layout: ScoreLayout) {
-        let editBar = store.sketch.timeSignature.bar(containing: store.editor.editPosition)
-        let leadingBar = max(editBar - 2, 1)
+    private func scrollToEditPosition() {
+        let leadingBar = max(store.editPositionBar - 2, 1)
         guard leadingBar > 1 else { return }
-        horizontalPosition.scrollTo(x: layout.barLineX(bar: leadingBar) - layout.stickyWidth)
+        store.scroll(toLeadingBar: leadingBar)
     }
 
     /// トラックが少ないときは行を伸ばして譜面ビューを埋める。
@@ -134,12 +147,13 @@ struct ScoreView: View {
             }
         }
         .scrollIndicators(.hidden)
-        .scrollPosition($horizontalPosition)
-        .onAppear { scrollToEditPosition(layout: layout) }
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            geometry.contentOffset.x + geometry.contentInsets.leading
-        } action: { _, offset in
-            horizontalOffset = offset
+        .scrollPosition($store.horizontalPosition)
+        .onAppear { scrollToEditPosition() }
+        .onScrollGeometryChange(for: CGRect.self) { geometry in
+            geometry.visibleRect
+        } action: { _, visible in
+            store.horizontalOffset = visible.minX
+            store.visibleStaffWidth = visible.width
         }
         .overlay(alignment: .topLeading) {
             VStack(spacing: 0) {
@@ -148,7 +162,7 @@ struct ScoreView: View {
                         track: track,
                         layout: layout,
                         rowHeight: rowHeight,
-                        leadingBarNumber: index == 0 ? layout.bar(atContentX: horizontalOffset + layout.stickyWidth + 1) : nil
+                        leadingBarNumber: index == 0 ? layout.bar(atContentX: store.horizontalOffset + layout.stickyWidth + 1) : nil
                     )
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                 }

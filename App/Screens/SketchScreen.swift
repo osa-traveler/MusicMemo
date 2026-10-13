@@ -27,9 +27,7 @@ struct SketchScreen: View {
     }
 
     private var sectionRow: some View {
-        placeholder("セクション行")
-            .frame(height: Metrics.sectionRowHeight)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        SectionBarView(store: store)
     }
 
     private var scoreView: some View {

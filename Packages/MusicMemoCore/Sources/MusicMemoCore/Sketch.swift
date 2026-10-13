@@ -9,7 +9,7 @@ public struct Sketch: Identifiable, Hashable, Codable, Sendable {
     /// テンポ（4分音符/分）。
     public var tempo: Double
     public var barCount: Int
-    public var sections: [Section]
+    public var sections: [SongSection]
     /// 開始位置順に並べる。
     public var chords: [ChordEvent]
     public var tracks: [Track]
@@ -24,7 +24,7 @@ public struct Sketch: Identifiable, Hashable, Codable, Sendable {
         timeSignature: TimeSignature = .common,
         tempo: Double = 120,
         barCount: Int,
-        sections: [Section] = [],
+        sections: [SongSection] = [],
         chords: [ChordEvent] = [],
         tracks: [Track] = [],
         playRange: Range<Tick>? = nil,
@@ -57,13 +57,13 @@ public struct Sketch: Identifiable, Hashable, Codable, Sendable {
         return chords.filter { $0.start >= start && $0.start < end }
     }
 
-    public func section(containingBar bar: Int) -> Section? {
+    public func section(containingBar bar: Int) -> SongSection? {
         sections.first { $0.bars.contains(bar) }
     }
 }
 
 /// セクション（Aメロ、サビ…）。小節番号は1始まり。
-public struct Section: Identifiable, Hashable, Codable, Sendable {
+public struct SongSection: Identifiable, Hashable, Codable, Sendable {
     public var id: UUID
     public var name: String
     public var startBar: Int
