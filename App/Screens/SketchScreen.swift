@@ -47,24 +47,7 @@ struct SketchScreen: View {
     }
 
     private var inputPalette: some View {
-        HStack(spacing: 18) {
-            placeholder("音価")
-                .frame(width: Metrics.durationBlockWidth)
-                .frame(maxHeight: .infinity)
-                .background(Palette.background.opacity(0.6), in: .rect(cornerRadius: Metrics.buttonCornerRadius))
-            placeholder("鍵盤")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Palette.background.opacity(0.6), in: .rect(cornerRadius: Metrics.buttonCornerRadius))
-            placeholder("入力方法")
-                .frame(width: Metrics.inputMethodBlockWidth)
-                .frame(maxHeight: .infinity)
-                .background(Palette.background.opacity(0.6), in: .rect(cornerRadius: Metrics.buttonCornerRadius))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(height: Metrics.paletteHeight)
-        .background(Palette.paper)
-        .overlay(alignment: .top) { Palette.rule.frame(height: 1) }
+        InputPaletteView(store: store)
     }
 
     private func placeholder(_ title: String) -> some View {

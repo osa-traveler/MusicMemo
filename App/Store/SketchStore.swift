@@ -19,6 +19,11 @@ final class SketchStore {
     /// 譜面に見えているトラック数（縦スクロール）。
     var visibleTrackCount = 0
 
+    // 入力パレット
+    var inputMethod: InputMethod = .keyboard
+    /// トラックごとの鍵盤の表示範囲（左端の C の MIDI ノート番号）。
+    private var keyboardLowestC: [Track.ID: MIDINote] = [:]
+
     init(sketch: Sketch = SampleData.sketch03()) {
         self.sketch = sketch
         self.editor = SampleData.editorState(for: sketch)
@@ -157,6 +162,46 @@ final class SketchStore {
 
     func toggleLoop() {
         sketch.isLooping.toggle()
+    }
+
+    // MARK: 入力パレット
+
+    var selectedTrack: Track? {
+        sketch.tracks.first { $0.id == editor.selectedTrackID }
+    }
+
+    /// 編集位置で鳴っているコード（鍵盤のコードトーン表示）。
+    var chordAtEditPosition: Chord? {
+        sketch.chord(at: editor.editPosition)?.chord
+    }
+
+    /// 鍵盤の左端の C。初期値はトラックの音部記号に合わせる（ト音記号 C4、ヘ音記号 C2）。
+    var keyboardLowestNote: MIDINote {
+        guard let track = selectedTrack else { return 60 }
+        return keyboardLowestC[track.id] ?? (track.clef == .bass ? 36 : 60)
+    }
+
+    /// 鍵盤を1オクターブずつ動かす（C1〜C7 の範囲）。
+    func shiftKeyboard(octaves: Int) {
+        guard let id = selectedTrack?.id else { return }
+        keyboardLowestC[id] = min(max(keyboardLowestNote + octaves * 12, 24), 96)
+    }
+
+    /// 音価を選ぶ。付点・3連符はそのまま保つ。
+    func selectNoteValue(_ value: NoteValue) {
+        editor.duration.value = value
+    }
+
+    func toggleDotted() {
+        editor.duration.isDotted.toggle()
+    }
+
+    func toggleTriplet() {
+        editor.duration.isTriplet.toggle()
+    }
+
+    func toggleTie() {
+        editor.isTieOn.toggle()
     }
 
     func toggleMute(of id: Track.ID) {
