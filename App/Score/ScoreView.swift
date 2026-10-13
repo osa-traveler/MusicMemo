@@ -46,9 +46,9 @@ struct ScoreView: View {
             }
 
             headerRow(height: Metrics.rulerHeight) {
-                RulerHeaderView(position: store.sketch.timeSignature.position(of: store.editor.editPosition))
+                RulerHeaderView(position: store.sketch.timeSignature.position(of: store.playheadTick ?? store.editor.editPosition))
             } content: {
-                RulerView(layout: layout, offset: horizontalOffset, editPosition: store.editor.editPosition) {
+                RulerView(layout: layout, offset: horizontalOffset, editPosition: store.playheadTick ?? store.editor.editPosition) {
                     store.setEditPosition($0)
                 }
             }
@@ -175,7 +175,7 @@ struct ScoreView: View {
             }
             context.stroke(dashes, with: .color(Palette.accent.opacity(0.6)), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
 
-            let x = layout.x(tick: store.editor.editPosition) - store.horizontalOffset
+            let x = layout.x(tick: store.playheadTick ?? store.editor.editPosition) - store.horizontalOffset
             guard visible(x) else { return }
             let top = rulerTop + 14
             context.fill(Path(CGRect(x: x - 1, y: top, width: 2, height: size.height - top)), with: .color(Palette.playhead))

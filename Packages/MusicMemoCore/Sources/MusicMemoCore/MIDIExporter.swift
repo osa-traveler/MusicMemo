@@ -66,7 +66,7 @@ public enum MIDIExporter {
     }
 
     /// タイでつながった同じ音高の音を1つにまとめる。
-    static func mergedNotes(_ notes: [Note]) -> [Note] {
+    public static func mergedNotes(_ notes: [Note]) -> [Note] {
         let sorted = notes.sorted { ($0.start, $0.pitch ?? -1) < ($1.start, $1.pitch ?? -1) }
         var result: [Note] = []
         var consumed = Set<Int>()

@@ -7,8 +7,17 @@ import SwiftUI
 @MainActor
 @Observable
 final class SketchStore {
-    var sketch: Sketch
+    var sketch: Sketch {
+        didSet { playbackScoreChanged() }
+    }
     var editor: EditorState
+
+    // 再生
+    private(set) var isPlaying = false
+    /// 再生位置（再生中だけ）。赤い線はこの位置に出す。
+    private(set) var playheadTick: Tick?
+    private(set) var isMetronomeOn = false
+    private var playbackTask: Task<Void, Never>?
 
     // 譜面の横スクロール（セクション行・全体ビューからも参照する）
     var horizontalPosition = ScrollPosition()
@@ -216,7 +225,8 @@ final class SketchStore {
         editor.previewPitch = pitch
         heldKeys.insert(pitch)
         if let id = editor.selectedTrackID { sound.noteOn(pitch, track: id) }
-        guard inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+        // 再生中は音だけ鳴らして入力しない（赤い線が動いていて入る位置が分かりにくいため）
+        guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
 
         if let range = pendingEntry ?? (addToChord ? lastEntry : nil) {
             // 和音に重ねる（押している途中の入力は同じ取り消し単位にまとめる）
@@ -251,7 +261,7 @@ final class SketchStore {
 
     /// 休符を選択中の音価で入力して進める。
     func enterRest() {
-        guard inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+        guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
         recordUndo()
         let range = NoteEditing.enter(
             pitches: [],
@@ -319,6 +329,91 @@ final class SketchStore {
         let visibleEnd = horizontalOffset + visibleStaffWidth
         guard visibleStaffWidth > 0, x < visibleStart + 8 || x > visibleEnd - 24 else { return }
         scrollStaff(toOffset: x - layout.stickyWidth - (visibleStaffWidth - layout.stickyWidth) / 3)
+    }
+
+    // MARK: 再生
+
+    func togglePlayback() {
+        isPlaying ? stopPlayback() : startPlayback()
+    }
+
+    /// 再生を始める。ループがオンなら再生範囲の始点から（編集位置が範囲内ならそこから）、オフなら編集位置から。
+    func startPlayback() {
+        guard !isPlaying else { return }
+        let range = sketch.playRange
+        let start = sketch.isLooping && !range.contains(editor.editPosition) ? range.lowerBound : editor.editPosition
+        isPlaying = true
+        playheadTick = start
+        lastPlaybackSketch = sketch
+        sound.play(PlaybackScore(sketch, metronome: isMetronomeOn), from: start)
+        playbackTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(16))
+                self?.updatePlayhead()
+            }
+        }
+    }
+
+    /// 止める。赤い線は再生を始めた位置（編集位置）に戻る。
+    func stopPlayback() {
+        guard isPlaying else { return }
+        isPlaying = false
+        playheadTick = nil
+        playbackTask?.cancel()
+        playbackTask = nil
+        sound.stop()
+        revealEditPosition()
+    }
+
+    func toggleMetronome() {
+        isMetronomeOn.toggle()
+        if isPlaying { sound.updateMix(PlaybackScore(sketch, metronome: isMetronomeOn)) }
+    }
+
+    #if DEBUG
+    /// 開発用：トラック名つきで出力レベルを測る。
+    func debugMeasureLevels(seconds: Double) {
+        sound.debugMeasureLevels(seconds: seconds, names: Dictionary(uniqueKeysWithValues: sketch.tracks.map { ($0.id, $0.name) }))
+    }
+    #endif
+
+    private func updatePlayhead() {
+        guard isPlaying, let tick = sound.playheadTick() else { return }
+        if !sketch.isLooping, tick >= sketch.totalTicks {
+            stopPlayback()
+            return
+        }
+        playheadTick = tick
+        followPlayhead(tick)
+    }
+
+    /// 再生位置が右端に近づいたら、ページ送りのようにスクロールする。ループで左へ戻ったときも追う。
+    private func followPlayhead(_ tick: Tick) {
+        let layout = layout
+        let x = layout.x(tick: tick)
+        let visibleStart = horizontalOffset + layout.stickyWidth
+        let visibleEnd = horizontalOffset + visibleStaffWidth
+        guard visibleStaffWidth > 0, x < visibleStart || x > visibleEnd - 40 else { return }
+        scrollStaff(toOffset: x - layout.stickyWidth - 40)
+    }
+
+    /// 再生中に曲が変わったら、再生用の並びを作り直して同じ位置から続ける（ミュート・ソロだけなら切り替えるだけ）。
+    private var lastPlaybackSketch: Sketch?
+    private func playbackScoreChanged() {
+        guard isPlaying else { return }
+        let score = PlaybackScore(sketch, metronome: isMetronomeOn)
+        if let tick = playheadTick, needsRebuild() {
+            sound.play(score, from: tick)
+        } else {
+            sound.updateMix(score)
+        }
+        lastPlaybackSketch = sketch
+    }
+
+    private func needsRebuild() -> Bool {
+        guard let last = lastPlaybackSketch else { return true }
+        return last.tracks.map(\.notes) != sketch.tracks.map(\.notes)
+            || last.playRange != sketch.playRange || last.isLooping != sketch.isLooping || last.tempo != sketch.tempo
     }
 
     /// 音価を選ぶ。付点・3連符はそのまま保つ。

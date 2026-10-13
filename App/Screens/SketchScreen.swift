@@ -22,12 +22,17 @@ struct SketchScreen: View {
         .foregroundStyle(Palette.ink)
         .focusedSceneValue(\.sketchStore, store)
         #if DEBUG
-        .onAppear { DebugInputDemo.runIfRequested(store) }
+        .onAppear {
+            DebugInputDemo.runIfRequested(store)
+            DebugPlaybackCheck.runIfRequested(store)
+        }
         #endif
     }
 
     private var topBar: some View {
-        TopBarView(sketch: store.sketch, canUndo: store.canUndo, canRedo: store.canRedo,
+        TopBarView(sketch: store.sketch, isPlaying: store.isPlaying, isMetronomeOn: store.isMetronomeOn,
+                   canUndo: store.canUndo, canRedo: store.canRedo,
+                   onTogglePlayback: store.togglePlayback, onToggleMetronome: store.toggleMetronome,
                    onToggleLoop: store.toggleLoop, onUndo: store.undo, onRedo: store.redo,
                    onExport: { Exporter.export(store.sketch, format: $0) })
     }

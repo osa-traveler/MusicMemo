@@ -8,6 +8,7 @@
 - 全トラックを改行しない横一行の五線で並べ、ピンチで拡大・縮小
 - 音価を選んで鍵盤を押すと、編集位置に音符が入って自動で進む
 - 曲全体を小節カードで見渡す全体ビュー（横スクロールバーを兼ねる）
+- 再生（ループ、ミュート・ソロ、メトロノーム）
 - MusicXML（コード記号付き）と MIDI で書き出し
 
 ## ドキュメント
@@ -26,7 +27,7 @@
 
 ```sh
 brew install xcodegen          # 未導入なら
-Scripts/fetch-soundfont.sh     # 鍵盤の音（GeneralUser GS）を取得。リポジトリには含めていない
+Scripts/fetch-soundfont.sh     # iPad 用の音源（GeneralUser GS）を取得。リポジトリには含めていない（Mac は macOS 標準の音源を使う）
 xcodegen generate              # MusicMemo.xcodeproj を生成（SoundFont を取得したあとに実行）
 open MusicMemo.xcodeproj
 ```
@@ -44,7 +45,7 @@ open MusicMemo.xcodeproj
 | `App/Overview/` | 全体ビュー |
 | `App/InputPalette/` | 入力パレット（音価、鍵盤、入力方法） |
 | `App/Store/` | 画面の状態と操作（SketchStore） |
-| `App/Audio/` | 鍵盤の音（AVAudioUnitSampler） |
+| `App/Audio/` | 鍵盤の音と再生（AVAudioUnitSampler、再生のスケジューラ） |
 | `App/Export/` | 書き出しの操作（保存ダイアログ・共有シート） |
 | `App/Theme/` | 色と寸法 |
 | `App/Debug/` | 開発用の仕組み（デバッグビルドのみ） |

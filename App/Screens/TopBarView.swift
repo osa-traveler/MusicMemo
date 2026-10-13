@@ -2,11 +2,15 @@ import MusicMemoCore
 import SwiftUI
 
 /// トップバー（高さ64）。戻る、曲名と曲の情報、再生／ループ／メトロノーム、元に戻す／やり直す、Logicへ書き出し。
-/// いまはループの切り替え、元に戻す／やり直す、書き出しが動く。
+/// 戻るボタン以外は動く。
 struct TopBarView: View {
     let sketch: Sketch
+    let isPlaying: Bool
+    let isMetronomeOn: Bool
     let canUndo: Bool
     let canRedo: Bool
+    let onTogglePlayback: () -> Void
+    let onToggleMetronome: () -> Void
     let onToggleLoop: () -> Void
     let onUndo: () -> Void
     let onRedo: () -> Void
@@ -28,10 +32,12 @@ struct TopBarView: View {
             Spacer(minLength: 0)
 
             HStack(spacing: 4) {
-                transportButton("play.fill", label: "再生", style: .primary) {}
+                transportButton(isPlaying ? "stop.fill" : "play.fill", label: isPlaying ? "停止" : "再生",
+                                style: .primary, action: onTogglePlayback)
                 transportButton("repeat", label: sketch.isLooping ? "ループ（オン）" : "ループ（オフ）",
                                 style: sketch.isLooping ? .active : .plain, action: onToggleLoop)
-                transportButton("metronome", label: "メトロノーム", style: .plain) {}
+                transportButton("metronome", label: isMetronomeOn ? "メトロノーム（オン）" : "メトロノーム（オフ）",
+                                style: isMetronomeOn ? .active : .plain, action: onToggleMetronome)
             }
             .padding(4)
             .background(Palette.background, in: .rect(cornerRadius: 12))

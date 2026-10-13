@@ -58,11 +58,22 @@ extension FocusedValues {
     @Entry var sketchStore: SketchStore?
 }
 
-/// メニュー：編集（元に戻す／やり直す／戻って消す）と表示（拡大／縮小／100%に戻す）。
+/// メニュー：再生（再生／停止・ループ・メトロノーム）、編集（元に戻す／やり直す／戻って消す）、表示（拡大／縮小／100%に戻す）。
 struct SketchCommands: Commands {
     @FocusedValue(\.sketchStore) private var store
 
     var body: some Commands {
+        CommandMenu("再生") {
+            Button(store?.isPlaying == true ? "停止" : "再生") { store?.togglePlayback() }
+                .keyboardShortcut(.space, modifiers: [])
+                .disabled(store == nil)
+            Button("ループ") { store?.toggleLoop() }
+                .keyboardShortcut("l", modifiers: .command)
+                .disabled(store == nil)
+            Button("メトロノーム") { store?.toggleMetronome() }
+                .keyboardShortcut("k", modifiers: .command)
+                .disabled(store == nil)
+        }
         CommandGroup(replacing: .undoRedo) {
             Button("元に戻す") { store?.undo() }
                 .keyboardShortcut("z", modifiers: .command)
