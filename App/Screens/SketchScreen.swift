@@ -1,8 +1,10 @@
 import SwiftUI
 
 /// 1曲の編集画面。上から「トップバー／セクション行／譜面ビュー／全体ビュー／入力パレット」の5段で、譜面ビューだけが高さ可変。
-/// Step 0 では各領域の枠だけを置く。
+/// 譜面ビュー以外はまだ枠だけ。
 struct SketchScreen: View {
+    @State private var store = SketchStore()
+
     var body: some View {
         VStack(spacing: 0) {
             topBar
@@ -35,17 +37,10 @@ struct SketchScreen: View {
     }
 
     private var scoreView: some View {
-        HStack(spacing: 0) {
-            placeholder("トラック情報")
-                .frame(width: Metrics.trackHeaderWidth)
-                .frame(maxHeight: .infinity)
-                .overlay(alignment: .trailing) { Palette.rule.frame(width: 1) }
-            placeholder("譜面ビュー")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Color.clear
-                .frame(width: Metrics.verticalScrollbarWidth)
-        }
-        .background(Palette.paper, in: .rect(cornerRadius: Metrics.panelCornerRadius))
+        ScoreView(store: store)
+            .frame(maxHeight: .infinity)
+            .background(Palette.paper)
+            .clipShape(.rect(cornerRadius: Metrics.panelCornerRadius))
         .shadow(color: Color(hex: 0x14161A, opacity: 0.06), radius: 1, y: 1)
     }
 

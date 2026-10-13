@@ -1,3 +1,4 @@
+import MusicMemoCore
 import SwiftUI
 
 /// SPEC「ビジュアル仕様」の色。白い紙面に墨色、操作はコバルトブルー、コードはオレンジ、編集位置だけ赤。
@@ -12,6 +13,8 @@ enum Palette {
 
     static let rule = Color(hex: 0xD9DCE1)
     static let ruleStrong = Color(hex: 0xC9CDD3)
+    /// トラック行の区切り線。
+    static let ruleSoft = Color(hex: 0xE4E6EA)
 
     static let accent = Color(hex: 0x2F5BEA)
     static let accentTint = Color(hex: 0xEAF0FE)
@@ -26,6 +29,19 @@ enum Palette {
     static let trackPurple = Color(hex: 0x7A5AB8)
     static let trackOchre = Color(hex: 0xB08A1E)
     static let trackGray = Color(hex: 0x5A606B)
+}
+
+extension TrackColor {
+    var color: Color {
+        switch self {
+        case .blue: Palette.trackBlue
+        case .orange: Palette.trackOrange
+        case .green: Palette.trackGreen
+        case .purple: Palette.trackPurple
+        case .ochre: Palette.trackOchre
+        case .gray: Palette.trackGray
+        }
+    }
 }
 
 extension Color {
