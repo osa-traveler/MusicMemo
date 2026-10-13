@@ -20,14 +20,20 @@ struct ScoreView: View {
     var body: some View {
         let layout = layout
         VStack(spacing: 0) {
-            // 再生範囲バー＋ルーラ（Step 3）の場所
-            HStack(spacing: 0) {
-                Palette.paperMuted
-                    .frame(width: Metrics.trackHeaderWidth)
-                    .overlay(alignment: .trailing) { Palette.rule.frame(width: 1) }
+            // 再生範囲バー（Step 3b）の場所
+            headerRow(height: Metrics.playRangeBarHeight) {
+                Color.clear
+            } content: {
                 Color.clear
             }
-            .frame(height: Metrics.playRangeBarHeight + Metrics.rulerHeight)
+
+            headerRow(height: Metrics.rulerHeight) {
+                RulerHeaderView(position: store.sketch.timeSignature.position(of: store.editor.editPosition))
+            } content: {
+                RulerView(layout: layout, offset: horizontalOffset, editPosition: store.editor.editPosition) {
+                    store.setEditPosition($0)
+                }
+            }
             .overlay(alignment: .bottom) { Palette.rule.frame(height: 1) }
 
             GeometryReader { geometry in
@@ -41,7 +47,32 @@ struct ScoreView: View {
                 .scrollIndicators(.hidden)
             }
         }
+        .overlay { editPositionLine(layout: layout) }
         .padding(.trailing, Metrics.verticalScrollbarWidth)
+    }
+
+    /// 再生範囲バー・ルーラの1段（左にトラック情報列と同じ幅の見出し）。
+    private func headerRow(height: CGFloat, @ViewBuilder header: () -> some View, @ViewBuilder content: () -> some View) -> some View {
+        HStack(spacing: 0) {
+            header()
+                .frame(width: Metrics.trackHeaderWidth, height: height)
+                .overlay(alignment: .trailing) { Palette.rule.frame(width: 1) }
+            content()
+        }
+        .frame(height: height)
+        .background(Palette.paperMuted)
+    }
+
+    /// 赤い編集位置ライン（ルーラの三角の下から全トラックの最下部まで）。音部記号の領域に入ったら隠す。
+    private func editPositionLine(layout: ScoreLayout) -> some View {
+        Canvas { context, size in
+            let x = layout.x(tick: store.editor.editPosition) - horizontalOffset
+            guard x >= layout.stickyWidth, x <= size.width else { return }
+            let top = Metrics.playRangeBarHeight + 14
+            context.fill(Path(CGRect(x: x - 1, y: top, width: 2, height: size.height - top)), with: .color(Palette.playhead))
+        }
+        .padding(.leading, Metrics.trackHeaderWidth)
+        .allowsHitTesting(false)
     }
 
     /// 編集位置の小節が左から3小節目に来るように横スクロールする（基準画面：7小節目を 5〜8 の中で表示）。
@@ -80,6 +111,11 @@ struct ScoreView: View {
                 ForEach(store.sketch.tracks) { track in
                     StaffRowView(track: track, sketch: store.sketch, editor: store.editor, layout: layout, rowHeight: rowHeight)
                         .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
+                        .onTapGesture { location in
+                            // 鍵盤入力中は、タップしたトラックを選び、編集位置もそこへ動かす
+                            store.selectTrack(track.id)
+                            store.setEditPosition(layout.tick(atContentX: location.x, grid: RulerView.seekGrid))
+                        }
                 }
             }
         }

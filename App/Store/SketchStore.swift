@@ -17,6 +17,11 @@ final class SketchStore {
         editor.selectedTrackID = id
     }
 
+    /// 編集位置を動かす（曲の範囲内に収める）。
+    func setEditPosition(_ tick: Tick) {
+        editor.editPosition = min(max(tick, 0), sketch.totalTicks - 1)
+    }
+
     func setVolume(_ volume: Int, of id: Track.ID) {
         updateTrack(id) { $0.volume = volume }
     }

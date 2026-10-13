@@ -81,6 +81,17 @@ struct ScoreLayout {
         return barLineX(bar: bar) + barLead + CGFloat(inBar) * pointsPerTick
     }
 
+    /// コンテンツ座標の x に最も近い位置（grid 単位に丸める）。小節線〜1拍目の余白は1拍目に寄せる。
+    func tick(atContentX x: CGFloat, grid: Tick) -> Tick {
+        let bar = bar(atContentX: x)
+        let ticksPerBar = timeSignature.ticksPerBar
+        let inBar = (x - barLineX(bar: bar) - barLead) / pointsPerTick
+        let clamped = min(max(inBar, 0), CGFloat(ticksPerBar))
+        let snapped = Int((clamped / CGFloat(grid)).rounded()) * grid
+        let tick = timeSignature.startTick(ofBar: bar) + snapped
+        return min(tick, barCount * ticksPerBar - grid)
+    }
+
     /// コンテンツ座標の x にある小節（範囲外は端の小節）。
     func bar(atContentX x: CGFloat) -> Int {
         let index = Int(((x - contentLeading) / barWidth).rounded(.down)) + 1
