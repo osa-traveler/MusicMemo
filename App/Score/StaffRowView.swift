@@ -18,6 +18,9 @@ struct StaffRowView: View {
             if isSelected {
                 drawInputBar(rowHeight: size.height, in: context)
             }
+            if layout.showsDetail {
+                drawEighthGrid(bottomLineY: bottom, in: context)
+            }
             StaffDrawing.staffLines(from: 0, to: size.width, bottomLineY: bottom, layout: layout, in: context)
             drawBarLines(bottomLineY: bottom, in: context)
             drawTimeSignature(bottomLineY: bottom, in: context)
@@ -42,13 +45,28 @@ struct StaffRowView: View {
         context.fill(Path(roundedRect: rect, cornerRadius: 6 * layout.zoom), with: .color(Palette.accent.opacity(0.08)))
     }
 
+    /// 拡大時、8分ごとの薄い縦線（五線の少し上下まで）。
+    private func drawEighthGrid(bottomLineY: CGFloat, in context: GraphicsContext) {
+        let time = layout.timeSignature
+        let eighth = Timing.ticksPerQuarter / 2
+        let top = layout.y(staffPosition: 12, bottomLineY: bottomLineY)
+        let bottom = layout.y(staffPosition: -4, bottomLineY: bottomLineY)
+        var path = Path()
+        for tick in stride(from: 0, to: layout.barCount * time.ticksPerBar, by: eighth) {
+            let x = layout.x(tick: tick)
+            path.move(to: CGPoint(x: x, y: top))
+            path.addLine(to: CGPoint(x: x, y: bottom))
+        }
+        context.stroke(path, with: .color(Palette.ruleSoft), lineWidth: 1)
+    }
+
     /// コードトラックの五線の上にコードネーム（オレンジ）。
     private func drawChordSymbols(bottomLineY: CGFloat, in context: GraphicsContext) {
         let baselineY = layout.y(staffPosition: 8, bottomLineY: bottomLineY) - layout.chordSymbolOffset
         for event in sketch.chords {
             let text = context.resolve(
                 Text(event.chord.symbol)
-                    .font(.system(size: 15 * layout.zoom, weight: .bold))
+                    .font(.system(size: layout.textSize(15), weight: .bold))
                     .foregroundStyle(Palette.chord)
             )
             let size = text.measure(in: CGSize(width: CGFloat.infinity, height: .infinity))
@@ -113,7 +131,7 @@ struct StickyClefView: View {
             if let leadingBarNumber {
                 let top = layout.y(staffPosition: 8, bottomLineY: bottom)
                 context.draw(
-                    Text("\(leadingBarNumber)").font(.system(size: 10 * layout.zoom)).foregroundStyle(Palette.inkTertiary),
+                    Text("\(leadingBarNumber)").font(.system(size: layout.textSize(10, minimumScale: 0.9))).foregroundStyle(Palette.inkTertiary),
                     at: CGPoint(x: 10 * layout.zoom, y: top - 14 * layout.zoom),
                     anchor: .bottomLeading
                 )

@@ -49,6 +49,9 @@ struct SectionBarView: View {
         let bars = store.visibleBars
         let position = store.sketch.timeSignature.position(of: store.editor.editPosition)
         let visible = bars.count == 1 ? "\(bars.lowerBound)小節" : "\(bars.lowerBound)〜\(bars.upperBound)小節"
-        return "表示 \(visible) · 入力位置 \(position.bar)小節 \(position.beat)拍目"
+        // トラック数は、全部が見えていないときかズーム中だけ出す（基準画面の100%には無い）
+        let total = store.sketch.tracks.count
+        let tracks = store.visibleTrackCount < total || store.editor.zoom != 1 ? " · \(store.visibleTrackCount)/\(total)トラック" : ""
+        return "表示 \(visible)\(tracks) · 入力位置 \(position.bar)小節 \(position.beat)拍目"
     }
 }

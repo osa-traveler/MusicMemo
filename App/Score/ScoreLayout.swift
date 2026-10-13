@@ -9,6 +9,20 @@ struct ScoreLayout {
     var keySignature: KeySignature
     var barCount: Int
 
+    // MARK: 倍率による表示の切り替え（SPEC 未決事項。触りながら調整する）
+
+    /// ルーラに拍番号、譜面に8分ごとの薄い縦線、トラック情報に M／S／音色。
+    var showsDetail: Bool { zoom >= 1.5 }
+    /// ルーラの8分・16分を間引き、トラック情報を1行にする。
+    var isCompact: Bool { zoom < 0.75 }
+    /// トラック情報をトラック名だけにする。
+    var isMinimal: Bool { zoom < 0.55 }
+
+    /// 文字は倍率どおりに縮めると読めなくなるので、下限を設ける。
+    func textSize(_ base: CGFloat, minimumScale: CGFloat = 0.8) -> CGFloat {
+        base * max(zoom, minimumScale)
+    }
+
     // MARK: 縦
 
     var staffSpace: CGFloat { 8 * zoom }

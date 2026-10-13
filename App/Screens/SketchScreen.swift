@@ -20,6 +20,7 @@ struct SketchScreen: View {
         }
         .background(Palette.background)
         .foregroundStyle(Palette.ink)
+        .focusedSceneValue(\.sketchStore, store)
     }
 
     private var topBar: some View {

@@ -2,7 +2,7 @@ import MusicMemoCore
 import SwiftUI
 
 /// 全体ビュー。曲全体の小節をカードで並べ、譜面ビューの横スクロールバーとして働く。
-/// 青い枠＝譜面に見えている範囲。枠のドラッグでスクロール、カードのタップでその小節へ。
+/// 青い枠＝譜面に見えている範囲。枠のドラッグでスクロール、両端のつまみでズーム、カードのタップでその小節へ。
 /// カードは最小幅まで縮め、それでも収まらなければ全体ビュー自体が枠に追従して横にずれる。
 struct OverviewView: View {
     let store: SketchStore
@@ -15,9 +15,19 @@ struct OverviewView: View {
     @State private var width: CGFloat = 0
     /// 全体ビュー自体の横スクロール量（カードが収まらないときだけ使う）。
     @State private var scrollX: CGFloat = 0
-    /// 枠のドラッグ開始時の譜面スクロール量。枠の外から始めたドラッグは nil のまま無視する。
-    @State private var dragStartOffset: CGFloat?
-    @State private var isDraggingFrame = false
+    /// 枠のドラッグの種類。枠の外から始めたドラッグは .ignored。
+    private enum FrameDrag {
+        case ignored
+        /// 枠ごと動かす（譜面を横スクロール）。
+        case move(startOffset: CGFloat)
+        /// 左／右のつまみで幅を変える（ズーム）。反対側の端は動かさない。
+        case resizeStart(span: (start: CGFloat, end: CGFloat))
+        case resizeEnd(span: (start: CGFloat, end: CGFloat))
+    }
+
+    @State private var frameDragState: FrameDrag?
+    /// つまみを掴める距離。
+    private static let handleGrab: CGFloat = 12
 
     private var barCount: Int { store.sketch.barCount }
 
@@ -132,24 +142,39 @@ struct OverviewView: View {
 
     // MARK: 操作
 
-    /// 枠の中から始めたドラッグで譜面を横スクロールする。
+    /// 枠の中からのドラッグで譜面を横スクロール、両端のつまみのドラッグで幅を変えてズームする。
     private var frameDrag: some Gesture {
         DragGesture(minimumDistance: 4)
             .onChanged { drag in
-                if !isDraggingFrame {
-                    isDraggingFrame = true
-                    let x = drag.startLocation.x + scrollX
-                    let frame = frameRange
-                    dragStartOffset = (frame.minX - 10...frame.maxX + 10).contains(x) ? store.horizontalOffset : nil
-                }
-                guard let start = dragStartOffset else { return }
+                let state = frameDragState ?? beginFrameDrag(at: drag.startLocation.x + scrollX)
+                frameDragState = state
                 let barsMoved = drag.translation.width / pitch
-                store.scrollStaff(toOffset: start + barsMoved * store.layout.barWidth)
+                switch state {
+                case .ignored:
+                    break
+                case .move(let startOffset):
+                    store.scrollStaff(toOffset: startOffset + barsMoved * store.layout.barWidth)
+                case .resizeStart(let span):
+                    store.zoomToShow(barsFrom: min(span.start + barsMoved, span.end - 0.25), to: span.end, keepEnd: true)
+                case .resizeEnd(let span):
+                    store.zoomToShow(barsFrom: span.start, to: max(span.end + barsMoved, span.start + 0.25), keepEnd: false)
+                }
             }
-            .onEnded { _ in
-                isDraggingFrame = false
-                dragStartOffset = nil
-            }
+            .onEnded { _ in frameDragState = nil }
+    }
+
+    private func beginFrameDrag(at x: CGFloat) -> FrameDrag {
+        let frame = frameRange
+        if abs(x - frame.minX) <= Self.handleGrab {
+            return .resizeStart(span: visibleBarSpan)
+        }
+        if abs(x - frame.maxX) <= Self.handleGrab {
+            return .resizeEnd(span: visibleBarSpan)
+        }
+        if (frame.minX...frame.maxX).contains(x) {
+            return .move(startOffset: store.horizontalOffset)
+        }
+        return .ignored
     }
 
     /// カードが収まらないとき、枠が見える位置まで全体ビューをずらす。
@@ -170,7 +195,7 @@ struct OverviewView: View {
     }
 }
 
-/// 表示範囲の枠（青い2ptの枠＋両端のつまみ）。つまみでの幅変更（ズーム）は Step 5。
+/// 表示範囲の枠（青い2ptの枠＋両端のつまみ）。つまみで幅を変えるとズームする。
 private struct ViewportFrame: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 11)

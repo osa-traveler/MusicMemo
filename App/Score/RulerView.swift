@@ -53,6 +53,16 @@ struct RulerView: View {
                 let inBeat = (tick - start) % time.ticksPerBeat
                 if inBeat == 0 {
                     beats.move(to: CGPoint(x: x, y: 16)); beats.addLine(to: CGPoint(x: x, y: height))
+                    let beat = (tick - start) / time.ticksPerBeat + 1
+                    if layout.showsDetail, beat > 1 {
+                        context.draw(
+                            Text("\(beat)").font(.system(size: 9)).foregroundStyle(Palette.inkTertiary),
+                            at: CGPoint(x: x + 3, y: 12),
+                            anchor: .bottomLeading
+                        )
+                    }
+                } else if layout.isCompact {
+                    continue
                 } else if inBeat % (sixteenth * 2) == 0 {
                     eighths.move(to: CGPoint(x: x, y: 22)); eighths.addLine(to: CGPoint(x: x, y: height))
                 } else {
