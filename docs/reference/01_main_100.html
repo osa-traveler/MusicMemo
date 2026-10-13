@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>A案-2 マルチトラック</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2F5BEA}a:hover{color:#1E3FB0}
+button{font-family:inherit}
+input[type=range]{accent-color:#2F5BEA}
+</style>
+</head>
+<body>
+<div style="width: 1194px; height: 834px; box-sizing: border-box; background: #EEF0F2; color: #1B1D21; font-family: 'IBM Plex Sans JP', 'Hiragino Sans', sans-serif; display: flex; flex-direction: column; border-radius: 20px; overflow: hidden">
+
+  <!-- Top bar -->
+  <div style="height: 64px; flex-shrink: 0; background: #FFFFFF; border-bottom: 1px solid #D9DCE1; display: flex; align-items: center; gap: 10px; padding: 0 16px; box-sizing: border-box">
+    <button aria-label="スケッチ一覧へ戻る" style="width: 44px; height: 44px; border: none; background: transparent; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #1B1D21">
+      <svg width="22" height="22" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l-6 6 6 6"/></svg>
+    </button>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <div style="font-size: 17px; font-weight: 700">スケッチ 03</div>
+      <div style="font-size: 12px; color: #5A606B">C major · 4/4 · ♩=96 · 16小節 · 4トラック</div>
+    </div>
+    <div style="flex: 1"></div>
+    <div style="display: flex; gap: 4px; background: #EEF0F2; border-radius: 12px; padding: 4px">
+      <button aria-label="再生" style="width: 44px; height: 40px; border: none; border-radius: 9px; background: #2F5BEA; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6 4l11 6-11 6z"/></svg>
+      </button>
+      <button aria-label="ループ（オン）" style="width: 44px; height: 40px; border: none; border-radius: 9px; background: #DCE5FD; color: #2F5BEA; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10V9a4 4 0 0 1 4-4h8l-2.5-2.5M16 10v1a4 4 0 0 1-4 4H4l2.5 2.5"/></svg>
+      </button>
+      <button aria-label="メトロノーム" style="width: 44px; height: 40px; border: none; border-radius: 9px; background: transparent; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 17h10L12 3H8z M10 13l5-6"/></svg>
+      </button>
+    </div>
+    <button aria-label="元に戻す" style="width: 44px; height: 44px; border: none; background: transparent; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #1B1D21">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h9a4.5 4.5 0 0 1 0 9H9"/></svg>
+    </button>
+    <button aria-label="やり直す" style="width: 44px; height: 44px; border: none; background: transparent; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #1B1D21">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4l4 4-4 4M17 8H8a4.5 4.5 0 0 0 0 9h3"/></svg>
+    </button>
+    <button style="height: 44px; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 10px; display: flex; align-items: center; gap: 8px; padding: 0 14px; font-size: 14px; font-weight: 500; color: #1B1D21">
+      <svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13V3M6 7l4-4 4 4M4 12v5h12v-5"/></svg>
+      Logicへ書き出し
+    </button>
+  </div>
+
+  <!-- Score + overview -->
+  <div style="flex: 1; min-height: 0; padding: 14px 18px 12px 18px; display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <span style="font-size: 12px; font-weight: 700; background: #1B1D21; color: #FFFFFF; padding: 4px 10px; border-radius: 999px">Aメロ</span>
+      <span style="font-size: 12px; color: #5A606B; padding: 4px 10px; border-radius: 999px; border: 1px solid #C9CDD3">サビ</span>
+      <span style="font-size: 12px; color: #5A606B; padding: 4px 10px; border-radius: 999px; border: 1px dashed #C9CDD3">＋ セクション</span>
+      <div style="flex: 1"></div>
+      <span style="font-size: 12px; color: #5A606B">表示 5〜8小節 · 入力位置 7小節 1拍目</span>
+    </div>
+
+    <!-- Multi-track score view -->
+    <div style="flex: 1; min-height: 0; background: #FFFFFF; border-radius: 14px; box-shadow: 0 1px 2px rgba(20,22,26,0.06); position: relative; overflow: hidden; display: flex; flex-direction: column; padding-right: 16px">
+
+      <!-- Play range (work area) bar -->
+      <div style="height: 18px; flex-shrink: 0; display: flex; background: #F6F7F9">
+        <div style="width: 196px; flex-shrink: 0; box-sizing: border-box; border-right: 1px solid #D9DCE1; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 10px; color: #5A606B">
+          <span>再生範囲</span>
+          <span style="font-weight: 700; color: #2F5BEA">6.1 → 8.1</span>
+        </div>
+        <svg viewBox="0 0 946 18" preserveAspectRatio="xMinYMid meet" style="flex: 1; min-width: 0; height: 100%; display: block" role="img" aria-label="再生範囲 6小節1拍目から8小節1拍目まで（ドラッグで変更）">
+          <rect x="278" y="4" width="444" height="11" rx="3" fill="#2F5BEA" fill-opacity="0.28"/>
+          <rect x="278" y="2" width="6" height="15" rx="2" fill="#2F5BEA"/>
+          <rect x="716" y="2" width="6" height="15" rx="2" fill="#2F5BEA"/>
+          <text x="292" y="12.5" font-size="9" font-weight="700" fill="#1E3FB0">ループ 6–7小節</text>
+        </svg>
+      </div>
+
+      <!-- Ruler (16th-note grid) -->
+      <div style="height: 28px; flex-shrink: 0; display: flex; border-bottom: 1px solid #D9DCE1; background: #F6F7F9">
+        <div style="width: 196px; flex-shrink: 0; box-sizing: border-box; border-right: 1px solid #D9DCE1; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; font-size: 11px; color: #5A606B">
+          <span>小節 · 拍</span>
+          <span style="font-weight: 700; color: #D92D20">7 . 1 . 1</span>
+        </div>
+        <svg viewBox="0 0 946 28" preserveAspectRatio="xMinYMid meet" style="flex: 1; min-width: 0; height: 100%; display: block" role="img" aria-label="ルーラ 5〜8小節、16分刻み">
+          <g font-size="11" font-weight="700" fill="#1B1D21">
+            <text x="60" y="12">5</text><text x="282" y="12">6</text><text x="504" y="12">7</text><text x="726" y="12">8</text>
+          </g>
+          <g stroke="#5A606B" stroke-width="1">
+            <line x1="56" y1="2" x2="56" y2="28"/><line x1="278" y1="2" x2="278" y2="28"/><line x1="500" y1="2" x2="500" y2="28"/><line x1="722" y1="2" x2="722" y2="28"/>
+          </g>
+          <g stroke="#5A606B" stroke-width="1">
+            <line x1="84" y1="16" x2="84" y2="28"/><line x1="132" y1="16" x2="132" y2="28"/><line x1="180" y1="16" x2="180" y2="28"/><line x1="228" y1="16" x2="228" y2="28"/>
+            <line x1="306" y1="16" x2="306" y2="28"/><line x1="354" y1="16" x2="354" y2="28"/><line x1="402" y1="16" x2="402" y2="28"/><line x1="450" y1="16" x2="450" y2="28"/>
+            <line x1="528" y1="16" x2="528" y2="28"/><line x1="576" y1="16" x2="576" y2="28"/><line x1="624" y1="16" x2="624" y2="28"/><line x1="672" y1="16" x2="672" y2="28"/>
+            <line x1="750" y1="16" x2="750" y2="28"/><line x1="798" y1="16" x2="798" y2="28"/><line x1="846" y1="16" x2="846" y2="28"/><line x1="894" y1="16" x2="894" y2="28"/>
+          </g>
+          <g stroke="#A9AEB6" stroke-width="1">
+            <line x1="108" y1="22" x2="108" y2="28"/><line x1="156" y1="22" x2="156" y2="28"/><line x1="204" y1="22" x2="204" y2="28"/><line x1="252" y1="22" x2="252" y2="28"/>
+            <line x1="330" y1="22" x2="330" y2="28"/><line x1="378" y1="22" x2="378" y2="28"/><line x1="426" y1="22" x2="426" y2="28"/><line x1="474" y1="22" x2="474" y2="28"/>
+            <line x1="552" y1="22" x2="552" y2="28"/><line x1="600" y1="22" x2="600" y2="28"/><line x1="648" y1="22" x2="648" y2="28"/><line x1="696" y1="22" x2="696" y2="28"/>
+            <line x1="774" y1="22" x2="774" y2="28"/><line x1="822" y1="22" x2="822" y2="28"/><line x1="870" y1="22" x2="870" y2="28"/><line x1="918" y1="22" x2="918" y2="28"/>
+          </g>
+          <g stroke="#C9CDD3" stroke-width="1">
+            <line x1="96" y1="25" x2="96" y2="28"/><line x1="120" y1="25" x2="120" y2="28"/><line x1="144" y1="25" x2="144" y2="28"/><line x1="168" y1="25" x2="168" y2="28"/><line x1="192" y1="25" x2="192" y2="28"/><line x1="216" y1="25" x2="216" y2="28"/><line x1="240" y1="25" x2="240" y2="28"/><line x1="264" y1="25" x2="264" y2="28"/>
+            <line x1="318" y1="25" x2="318" y2="28"/><line x1="342" y1="25" x2="342" y2="28"/><line x1="366" y1="25" x2="366" y2="28"/><line x1="390" y1="25" x2="390" y2="28"/><line x1="414" y1="25" x2="414" y2="28"/><line x1="438" y1="25" x2="438" y2="28"/><line x1="462" y1="25" x2="462" y2="28"/><line x1="486" y1="25" x2="486" y2="28"/>
+            <line x1="540" y1="25" x2="540" y2="28"/><line x1="564" y1="25" x2="564" y2="28"/><line x1="588" y1="25" x2="588" y2="28"/><line x1="612" y1="25" x2="612" y2="28"/><line x1="636" y1="25" x2="636" y2="28"/><line x1="660" y1="25" x2="660" y2="28"/><line x1="684" y1="25" x2="684" y2="28"/><line x1="708" y1="25" x2="708" y2="28"/>
+            <line x1="762" y1="25" x2="762" y2="28"/><line x1="786" y1="25" x2="786" y2="28"/><line x1="810" y1="25" x2="810" y2="28"/><line x1="834" y1="25" x2="834" y2="28"/><line x1="858" y1="25" x2="858" y2="28"/><line x1="882" y1="25" x2="882" y2="28"/><line x1="906" y1="25" x2="906" y2="28"/><line x1="930" y1="25" x2="930" y2="28"/>
+          </g>
+          <polygon points="521,6 535,6 528,15" fill="#D92D20"/>
+        </svg>
+      </div>
+
+      <!-- Track 1: Melody (selected) -->
+      <div style="flex: 1; min-height: 0; display: flex; border-bottom: 1px solid #E4E6EA">
+        <div style="width: 196px; flex-shrink: 0; box-sizing: border-box; padding: 8px 12px 8px 10px; background: #EAF0FE; border-left: 4px solid #2F5BEA; border-right: 1px solid #D9DCE1; display: flex; flex-direction: column; justify-content: center; gap: 4px">
+          <div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 14px; font-weight: 700">Piano</span><span style="font-size: 11px; color: #5A606B">メロディ</span></div>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Vol</span><input type="range" min="0" max="100" value="80" style="flex: 1; min-width: 0; margin: 0"></label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Pan</span><input type="range" min="-64" max="63" value="0" style="flex: 1; min-width: 0; margin: 0"><span style="width: 22px; text-align: right">C</span></label>
+        </div>
+        <svg viewBox="0 0 946 90" preserveAspectRatio="xMinYMid meet" style="flex: 1; min-width: 0; height: 100%; display: block" role="img" aria-label="メロディ 5〜8小節。7小節目に入力カーソル">
+          <rect x="502" y="14" width="218" height="74" rx="6" fill="#2F5BEA" fill-opacity="0.08"/>
+          <text x="10" y="26" font-size="10" fill="#8A909A">5</text>
+          <g stroke="#1B1D21" stroke-width="0.9">
+            <line x1="8" y1="40" x2="944" y2="40"/><line x1="8" y1="48" x2="944" y2="48"/><line x1="8" y1="56" x2="944" y2="56"/><line x1="8" y1="64" x2="944" y2="64"/><line x1="8" y1="72" x2="944" y2="72"/>
+            <line x1="278" y1="40" x2="278" y2="72"/><line x1="500" y1="40" x2="500" y2="72"/><line x1="722" y1="40" x2="722" y2="72"/>
+          </g>
+          <text x="10" y="71" font-size="43" font-family="'Noto Music','Apple Symbols','Bravura',serif" fill="#1B1D21">𝄞</text>
+          <g fill="#1B1D21" stroke="#1B1D21" stroke-width="1.3">
+            <ellipse cx="84" cy="72" rx="5.2" ry="3.7" transform="rotate(-20 84 72)"/><line x1="89" y1="72" x2="89" y2="46"/>
+            <ellipse cx="132" cy="64" rx="5.2" ry="3.7" transform="rotate(-20 132 64)"/><line x1="137" y1="64" x2="137" y2="38"/>
+            <ellipse cx="180" cy="44" rx="5.2" ry="3.7" transform="rotate(-20 180 44)" fill="#FFFFFF" stroke-width="1.6"/><line x1="175" y1="44" x2="175" y2="70"/>
+            <ellipse cx="306" cy="48" rx="5.2" ry="3.7" transform="rotate(-20 306 48)"/><line x1="301" y1="48" x2="301" y2="74"/>
+            <ellipse cx="354" cy="52" rx="5.2" ry="3.7" transform="rotate(-20 354 52)"/><line x1="349" y1="52" x2="349" y2="78"/>
+            <ellipse cx="402" cy="60" rx="5.2" ry="3.7" transform="rotate(-20 402 60)" fill="#FFFFFF" stroke-width="1.6"/><line x1="407" y1="60" x2="407" y2="34"/>
+          </g>
+          <g fill="#2F5BEA" fill-opacity="0.45" stroke="#2F5BEA" stroke-opacity="0.45" stroke-width="1.3">
+            <ellipse cx="528" cy="68" rx="5.2" ry="3.7" transform="rotate(-20 528 68)"/><line x1="533" y1="68" x2="533" y2="42"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Track 2: Chords -->
+      <div style="flex: 1; min-height: 0; display: flex; border-bottom: 1px solid #E4E6EA">
+        <div style="width: 196px; flex-shrink: 0; box-sizing: border-box; padding: 8px 12px 8px 10px; border-left: 4px solid #C2541F; border-right: 1px solid #D9DCE1; display: flex; flex-direction: column; justify-content: center; gap: 4px">
+          <div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 14px; font-weight: 700">E.Piano</span><span style="font-size: 11px; color: #5A606B">コード</span></div>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Vol</span><input type="range" min="0" max="100" value="64" style="flex: 1; min-width: 0; margin: 0"></label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Pan</span><input type="range" min="-64" max="63" value="-16" style="flex: 1; min-width: 0; margin: 0"><span style="width: 22px; text-align: right">L16</span></label>
+        </div>
+        <svg viewBox="0 0 946 90" preserveAspectRatio="xMinYMid meet" style="flex: 1; min-width: 0; height: 100%; display: block" role="img" aria-label="コード 5〜8小節 C/E, F, Dm7, G7">
+          <g stroke="#1B1D21" stroke-width="0.9">
+            <line x1="8" y1="40" x2="944" y2="40"/><line x1="8" y1="48" x2="944" y2="48"/><line x1="8" y1="56" x2="944" y2="56"/><line x1="8" y1="64" x2="944" y2="64"/><line x1="8" y1="72" x2="944" y2="72"/>
+            <line x1="278" y1="40" x2="278" y2="72"/><line x1="500" y1="40" x2="500" y2="72"/><line x1="722" y1="40" x2="722" y2="72"/>
+          </g>
+          <text x="10" y="71" font-size="43" font-family="'Noto Music','Apple Symbols','Bravura',serif" fill="#1B1D21">𝄞</text>
+          <g font-size="15" font-weight="700" fill="#C2541F">
+            <text x="74" y="24">C/E</text><text x="296" y="24">F</text><text x="518" y="24">Dm7</text><text x="740" y="24">G7</text>
+          </g>
+          <g fill="none" stroke="#1B1D21" stroke-width="1.6">
+            <ellipse cx="90" cy="72" rx="6" ry="4" transform="rotate(-15 90 72)"/><ellipse cx="90" cy="64" rx="6" ry="4" transform="rotate(-15 90 64)"/><ellipse cx="90" cy="52" rx="6" ry="4" transform="rotate(-15 90 52)"/>
+            <ellipse cx="312" cy="68" rx="6" ry="4" transform="rotate(-15 312 68)"/><ellipse cx="312" cy="60" rx="6" ry="4" transform="rotate(-15 312 60)"/><ellipse cx="312" cy="52" rx="6" ry="4" transform="rotate(-15 312 52)"/>
+            <ellipse cx="534" cy="76" rx="6" ry="4" transform="rotate(-15 534 76)"/><ellipse cx="534" cy="68" rx="6" ry="4" transform="rotate(-15 534 68)"/><ellipse cx="534" cy="60" rx="6" ry="4" transform="rotate(-15 534 60)"/><ellipse cx="534" cy="52" rx="6" ry="4" transform="rotate(-15 534 52)"/>
+            <ellipse cx="756" cy="64" rx="6" ry="4" transform="rotate(-15 756 64)"/><ellipse cx="756" cy="56" rx="6" ry="4" transform="rotate(-15 756 56)"/><ellipse cx="756" cy="48" rx="6" ry="4" transform="rotate(-15 756 48)"/><ellipse cx="756" cy="40" rx="6" ry="4" transform="rotate(-15 756 40)"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Track 3: Bass -->
+      <div style="flex: 1; min-height: 0; display: flex; border-bottom: 1px solid #E4E6EA">
+        <div style="width: 196px; flex-shrink: 0; box-sizing: border-box; padding: 8px 12px 8px 10px; border-left: 4px solid #3D7A5C; border-right: 1px solid #D9DCE1; display: flex; flex-direction: column; justify-content: center; gap: 4px">
+          <div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 14px; font-weight: 700">Finger Bass</span><span style="font-size: 11px; color: #5A606B">ベース</span></div>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Vol</span><input type="range" min="0" max="100" value="72" style="flex: 1; min-width: 0; margin: 0"></label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Pan</span><input type="range" min="-64" max="63" value="0" style="flex: 1; min-width: 0; margin: 0"><span style="width: 22px; text-align: right">C</span></label>
+        </div>
+        <svg viewBox="0 0 946 90" preserveAspectRatio="xMinYMid meet" style="flex: 1; min-width: 0; height: 100%; display: block" role="img" aria-label="ベース 5〜8小節 E C, F A, D F, G B">
+          <g stroke="#1B1D21" stroke-width="0.9">
+            <line x1="8" y1="40" x2="944" y2="40"/><line x1="8" y1="48" x2="944" y2="48"/><line x1="8" y1="56" x2="944" y2="56"/><line x1="8" y1="64" x2="944" y2="64"/><line x1="8" y1="72" x2="944" y2="72"/>
+            <line x1="278" y1="40" x2="278" y2="72"/><line x1="500" y1="40" x2="500" y2="72"/><line x1="722" y1="40" x2="722" y2="72"/>
+          </g>
+          <text x="12" y="66" font-size="36" font-family="'Noto Music','Apple Symbols','Bravura',serif" fill="#1B1D21">𝄢</text>
+          <g fill="#FFFFFF" stroke="#1B1D21" stroke-width="1.6">
+            <ellipse cx="84" cy="52" rx="5.2" ry="3.7" transform="rotate(-20 84 52)"/><ellipse cx="180" cy="60" rx="5.2" ry="3.7" transform="rotate(-20 180 60)"/>
+            <ellipse cx="306" cy="48" rx="5.2" ry="3.7" transform="rotate(-20 306 48)"/><ellipse cx="402" cy="68" rx="5.2" ry="3.7" transform="rotate(-20 402 68)"/>
+            <ellipse cx="528" cy="56" rx="5.2" ry="3.7" transform="rotate(-20 528 56)"/><ellipse cx="624" cy="48" rx="5.2" ry="3.7" transform="rotate(-20 624 48)"/>
+            <ellipse cx="750" cy="72" rx="5.2" ry="3.7" transform="rotate(-20 750 72)"/><ellipse cx="846" cy="64" rx="5.2" ry="3.7" transform="rotate(-20 846 64)"/>
+          </g>
+          <g stroke="#1B1D21" stroke-width="1.3">
+            <line x1="79" y1="52" x2="79" y2="78"/><line x1="185" y1="60" x2="185" y2="34"/>
+            <line x1="301" y1="48" x2="301" y2="74"/><line x1="407" y1="68" x2="407" y2="42"/>
+            <line x1="523" y1="56" x2="523" y2="82"/><line x1="619" y1="48" x2="619" y2="74"/>
+            <line x1="755" y1="72" x2="755" y2="46"/><line x1="851" y1="64" x2="851" y2="38"/>
+          </g>
+        </svg>
+      </div>
+
+      <!-- Track 4: Strings -->
+      <div style="flex: 1; min-height: 0; display: flex">
+        <div style="width: 196px; flex-shrink: 0; box-sizing: border-box; padding: 8px 12px 8px 10px; border-left: 4px solid #7A5AB8; border-right: 1px solid #D9DCE1; display: flex; flex-direction: column; justify-content: center; gap: 4px">
+          <div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 14px; font-weight: 700">Strings</span><span style="font-size: 11px; color: #5A606B">パッド</span></div>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Vol</span><input type="range" min="0" max="100" value="48" style="flex: 1; min-width: 0; margin: 0"></label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: #5A606B"><span style="width: 24px">Pan</span><input type="range" min="-64" max="63" value="20" style="flex: 1; min-width: 0; margin: 0"><span style="width: 22px; text-align: right">R20</span></label>
+        </div>
+        <svg viewBox="0 0 946 90" preserveAspectRatio="xMinYMid meet" style="flex: 1; min-width: 0; height: 100%; display: block" role="img" aria-label="ストリングス 5〜8小節 全音符 G4 A4 A4 B4">
+          <g stroke="#1B1D21" stroke-width="0.9">
+            <line x1="8" y1="40" x2="944" y2="40"/><line x1="8" y1="48" x2="944" y2="48"/><line x1="8" y1="56" x2="944" y2="56"/><line x1="8" y1="64" x2="944" y2="64"/><line x1="8" y1="72" x2="944" y2="72"/>
+            <line x1="278" y1="40" x2="278" y2="72"/><line x1="500" y1="40" x2="500" y2="72"/><line x1="722" y1="40" x2="722" y2="72"/>
+          </g>
+          <text x="10" y="71" font-size="43" font-family="'Noto Music','Apple Symbols','Bravura',serif" fill="#1B1D21">𝄞</text>
+          <g fill="none" stroke="#1B1D21" stroke-width="1.6">
+            <ellipse cx="90" cy="64" rx="6" ry="4" transform="rotate(-15 90 64)"/>
+            <ellipse cx="312" cy="60" rx="6" ry="4" transform="rotate(-15 312 60)"/>
+            <ellipse cx="534" cy="60" rx="6" ry="4" transform="rotate(-15 534 60)"/>
+            <ellipse cx="756" cy="56" rx="6" ry="4" transform="rotate(-15 756 56)"/>
+          </g>
+          <path d="M96 70 Q 200 80, 306 70" fill="none" stroke="#1B1D21" stroke-width="1.2" stroke-opacity="0"/>
+        </svg>
+      </div>
+
+      <!-- Edit position line (7小節 1拍目) -->
+      <div aria-hidden="true" style="position: absolute; top: 18px; bottom: 0; left: 474px; border-left: 1px dashed #2F5BEA; opacity: 0.6; pointer-events: none"></div>
+      <div aria-hidden="true" style="position: absolute; top: 18px; bottom: 0; left: 918px; border-left: 1px dashed #2F5BEA; opacity: 0.6; pointer-events: none"></div>
+      <div aria-hidden="true" style="position: absolute; top: 32px; bottom: 0; left: 723px; width: 2px; background: #D92D20; pointer-events: none"></div>
+
+      <!-- Vertical scrollbar -->
+      <div aria-label="縦スクロール（4/6トラック表示中）" style="position: absolute; top: 6px; right: 4px; bottom: 6px; width: 8px; border-radius: 4px; background: #EEF0F2">
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 66%; border-radius: 4px; background: #8A909A"></div>
+      </div>
+    </div>
+
+    <!-- Overview / horizontal scrollbar (aligned to the staff area: track header 196px, v-scrollbar 16px) -->
+    <div style="flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; padding-left: 196px; padding-right: 16px">
+      <div style="display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px; font-size: 11px; font-weight: 700; color: #5A606B">
+        <span style="grid-column: span 8; border-left: 2px solid #1B1D21; padding-left: 6px">Aメロ</span>
+        <span style="grid-column: span 8; border-left: 2px solid #C9CDD3; padding-left: 6px">サビ</span>
+      </div>
+      <div style="position: relative">
+        <div style="display: grid; grid-template-columns: repeat(16, minmax(0, 1fr)); gap: 4px">
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">C</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">Am</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">F</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">G</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">C/E</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">F</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #EAF0FE; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #2F5BEA; display: flex; align-items: center; gap: 4px">Dm7<span style="width: 6px; height: 6px; border-radius: 3px; background: #2F5BEA"></span></span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">G7</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">C</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">G/B</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">F</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">G7</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #FFFFFF; border-radius: 8px; border: 1px solid #D9DCE1; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; font-weight: 700; color: #C2541F">Am7</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #C9CDD3 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #F4F5F7; border-radius: 8px; border: 1px dashed #C9CDD3; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; color: #8A909A">—</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #D9DCE1 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #F4F5F7; border-radius: 8px; border: 1px dashed #C9CDD3; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; color: #8A909A">—</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #D9DCE1 0 1px, transparent 1px 4px)"></div></div>
+          <div style="height: 46px; background: #F4F5F7; border-radius: 8px; border: 1px dashed #C9CDD3; padding: 5px 6px; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 11px; color: #8A909A">—</span><div style="height: 17px; background: repeating-linear-gradient(to bottom, #D9DCE1 0 1px, transparent 1px 4px)"></div></div>
+        </div>
+        <!-- viewport thumb: bars 5–8 currently on screen -->
+        <div aria-label="表示範囲 5〜8小節（ドラッグでスクロール）" style="position: absolute; left: calc(25% - 3px); top: -4px; bottom: -4px; width: calc(25% + 5px); border: 2px solid #2F5BEA; border-radius: 11px; background: rgba(47,91,234,0.06); box-sizing: border-box; display: flex; align-items: center; justify-content: space-between">
+          <span style="width: 6px; height: 22px; border-radius: 3px; background: #2F5BEA; margin-left: -4px"></span>
+          <span style="width: 6px; height: 22px; border-radius: 3px; background: #2F5BEA; margin-right: -4px"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input palette -->
+  <div style="height: 206px; flex-shrink: 0; background: #FFFFFF; border-top: 1px solid #D9DCE1; display: flex; gap: 18px; padding: 14px 16px; box-sizing: border-box">
+    <div style="width: 228px; display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; font-weight: 700; color: #5A606B">音価</div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+        <button aria-label="全音符" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="30" viewBox="0 0 24 32" aria-hidden="true"><ellipse cx="12" cy="18" rx="6.5" ry="4.4" transform="rotate(-20 12 18)" fill="none" stroke="currentColor" stroke-width="2.4"/></svg>
+        </button>
+        <button aria-label="2分音符" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="30" viewBox="0 0 24 32" aria-hidden="true"><ellipse cx="10" cy="25" rx="5.5" ry="3.8" transform="rotate(-20 10 25)" fill="none" stroke="currentColor" stroke-width="2"/><line x1="15.2" y1="24" x2="15.2" y2="3" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button aria-label="4分音符（選択中）" style="height: 44px; border-radius: 10px; border: none; background: #2F5BEA; color: #FFFFFF; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="30" viewBox="0 0 24 32" aria-hidden="true"><ellipse cx="10" cy="25" rx="5.5" ry="3.8" transform="rotate(-20 10 25)" fill="currentColor"/><line x1="15.2" y1="24" x2="15.2" y2="3" stroke="currentColor" stroke-width="1.8"/></svg>
+        </button>
+        <button aria-label="8分音符" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="30" viewBox="0 0 24 32" aria-hidden="true"><ellipse cx="10" cy="25" rx="5.5" ry="3.8" transform="rotate(-20 10 25)" fill="currentColor"/><line x1="15.2" y1="24" x2="15.2" y2="3" stroke="currentColor" stroke-width="1.8"/><path d="M15.2 3 C 16 8, 22 9, 20.5 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button aria-label="16分音符" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="30" viewBox="0 0 24 32" aria-hidden="true"><ellipse cx="10" cy="25" rx="5.5" ry="3.8" transform="rotate(-20 10 25)" fill="currentColor"/><line x1="15.2" y1="24" x2="15.2" y2="3" stroke="currentColor" stroke-width="1.8"/><path d="M15.2 3 C 16 7, 22 8, 20.5 13 M15.2 9 C 16 13, 22 14, 20.5 19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button aria-label="付点" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="26" height="30" viewBox="0 0 28 32" aria-hidden="true"><ellipse cx="10" cy="25" rx="5.5" ry="3.8" transform="rotate(-20 10 25)" fill="currentColor" fill-opacity="0.35"/><line x1="15.2" y1="24" x2="15.2" y2="3" stroke="currentColor" stroke-opacity="0.35" stroke-width="1.8"/><circle cx="22" cy="24" r="2.6" fill="currentColor"/></svg>
+        </button>
+        <button aria-label="4分休符" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #F6F7F9; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="22" height="30" viewBox="0 0 24 32" aria-hidden="true"><path d="M10 3 L15.5 9.5 L10.5 15 L16 21.5 C 12 20, 8.5 22, 12 28" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button aria-label="タイ" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #F6F7F9; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="7" cy="14" rx="4.2" ry="3" transform="rotate(-20 7 14)" fill="currentColor"/><ellipse cx="25" cy="14" rx="4.2" ry="3" transform="rotate(-20 25 14)" fill="currentColor"/><path d="M6 19 Q 16 27, 26 19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button aria-label="3連符" style="height: 44px; border-radius: 10px; border: 1px solid #D9DCE1; background: #F6F7F9; color: #1B1D21; display: flex; align-items: center; justify-content: center">
+          <svg width="32" height="30" viewBox="0 0 34 32" aria-hidden="true"><text x="17" y="7" font-size="8" font-weight="700" text-anchor="middle" fill="currentColor" font-family="Georgia,serif">3</text><g fill="currentColor"><ellipse cx="6" cy="26" rx="3.8" ry="2.7" transform="rotate(-20 6 26)"/><ellipse cx="16" cy="26" rx="3.8" ry="2.7" transform="rotate(-20 16 26)"/><ellipse cx="26" cy="26" rx="3.8" ry="2.7" transform="rotate(-20 26 26)"/><rect x="8.6" y="10" width="20.8" height="2.6"/></g><g stroke="currentColor" stroke-width="1.5"><line x1="9.4" y1="25.5" x2="9.4" y2="10"/><line x1="19.4" y1="25.5" x2="19.4" y2="10"/><line x1="29.4" y1="25.5" x2="29.4" y2="10"/></g></svg>
+        </button>
+      </div>
+    </div>
+
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <div style="font-size: 12px; font-weight: 700; color: #5A606B">音高</div>
+        <span style="display: flex; align-items: center; gap: 4px; font-size: 12px; color: #C2541F"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span>Dm7 のコードトーン</span>
+        <div style="flex: 1"></div>
+        <button aria-label="1オクターブ下げる" style="width: 44px; height: 32px; border-radius: 8px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21">‹</button>
+        <span style="font-size: 13px; font-weight: 500; width: 64px; text-align: center">C4–B5</span>
+        <button aria-label="1オクターブ上げる" style="width: 44px; height: 32px; border-radius: 8px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21">›</button>
+      </div>
+      <div style="flex: 1; position: relative; display: flex; gap: 0">
+        <button aria-label="C4" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px; font-size: 10px; color: #8A909A">C4</button>
+        <button aria-label="D4" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span></button>
+        <button aria-label="E4" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px"></button>
+        <button aria-label="F4（選択中）" style="flex: 1; border: 2px solid #2F5BEA; background: #DCE5FD; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span></button>
+        <button aria-label="G4" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px"></button>
+        <button aria-label="A4" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span></button>
+        <button aria-label="B4" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px"></button>
+        <button aria-label="C5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding-bottom: 6px; font-size: 10px; color: #8A909A"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span>C5</button>
+        <button aria-label="D5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span></button>
+        <button aria-label="E5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px"></button>
+        <button aria-label="F5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span></button>
+        <button aria-label="G5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px"></button>
+        <button aria-label="A5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 8px"><span style="width: 8px; height: 8px; border-radius: 4px; background: #C2541F"></span></button>
+        <button aria-label="B5" style="flex: 1; border: 1px solid #C9CDD3; background: #FFFFFF; border-radius: 0 0 8px 8px"></button>
+        <button aria-label="C#4" style="position: absolute; top: 0; left: 4.94%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="D#4" style="position: absolute; top: 0; left: 12.09%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="F#4" style="position: absolute; top: 0; left: 26.37%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="G#4" style="position: absolute; top: 0; left: 33.51%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="A#4" style="position: absolute; top: 0; left: 40.66%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="C#5" style="position: absolute; top: 0; left: 54.94%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="D#5" style="position: absolute; top: 0; left: 62.09%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="F#5" style="position: absolute; top: 0; left: 76.37%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="G#5" style="position: absolute; top: 0; left: 83.51%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+        <button aria-label="A#5" style="position: absolute; top: 0; left: 90.66%; width: 4.4%; height: 58%; border: none; background: #1B1D21; border-radius: 0 0 5px 5px"></button>
+      </div>
+    </div>
+
+    <div style="width: 168px; display: flex; flex-direction: column; gap: 8px">
+      <div style="font-size: 12px; font-weight: 700; color: #5A606B">入力方法</div>
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <button style="height: 40px; border-radius: 10px; border: none; background: #1B1D21; color: #FFFFFF; font-size: 13px; font-weight: 500">鍵盤</button>
+        <button style="height: 40px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; font-size: 13px">譜面を直接タップ</button>
+        <button style="height: 40px; border-radius: 10px; border: 1px solid #D9DCE1; background: #FFFFFF; color: #1B1D21; font-size: 13px">MIDIキーボード</button>
+      </div>
+      <div style="font-size: 11px; color: #5A606B; line-height: 1.5">入力後は自動で次の拍へ進む</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

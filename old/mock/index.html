@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>音楽のメモ帳 (mock)</title>
+<style>
+:root {
+  --bg: #f6f5f1; --panel: #ffffff; --ink: #1f2328; --sub: #6b7280; --line: #e2e0d8;
+  --accent: #2f6fed; --accent-ink: #fff; --sel: #dfe9ff; --play: #ffe9a8; --err: #c62828;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #16181c; --panel: #1f2227; --ink: #e8eaed; --sub: #9aa0a6; --line: #333840; --accent: #6b9bff; --accent-ink: #0b1220; --sel: #27395f; --play: #5a4a14; --err: #ff8a80; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.4 -apple-system, "Hiragino Sans", sans-serif; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; cursor: pointer; min-height: 40px; }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+button.on { background: var(--sel); border-color: var(--accent); }
+input, select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 40px; }
+#app { display: flex; min-height: 100vh; }
+aside { width: 220px; flex: none; border-right: 1px solid var(--line); padding: 12px; background: var(--panel); }
+aside.hidden { display: none; }
+.side-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#sketchList { list-style: none; margin: 0; padding: 0; }
+#sketchList li { padding: 8px; border-radius: 8px; cursor: pointer; display: flex; justify-content: space-between; gap: 6px; }
+#sketchList li.cur { background: var(--sel); }
+#sketchList small { color: var(--sub); display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px; }
+#sketchList .del { border: 0; background: none; min-height: 0; padding: 0 4px; color: var(--sub); }
+main { flex: 1; min-width: 0; max-width: 960px; padding: 12px 16px 40px; margin: 0 auto; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.row label { display: flex; align-items: center; gap: 6px; color: var(--sub); font-size: 13px; }
+#title { flex: 1; min-width: 140px; font-size: 18px; font-weight: 600; }
+#tempo { width: 72px; }
+.prog { width: 100%; font: 600 20px/1.3 ui-monospace, Menlo, monospace; padding: 12px; }
+.prog.bad { border-color: var(--err); }
+#progMsg { min-height: 20px; font-size: 13px; color: var(--sub); margin: 4px 0 12px; }
+#progMsg.bad { color: var(--err); }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+@media (max-width: 640px) { .grid { grid-template-columns: repeat(2, 1fr); } aside { position: fixed; z-index: 5; height: 100%; } }
+.bar { background: var(--panel); border: 2px solid var(--line); border-radius: 10px; min-height: 76px; padding: 6px; position: relative; cursor: pointer; display: flex; flex-direction: column; }
+.bar.sel { border-color: var(--accent); }
+.bar.playing { background: var(--play); }
+.bar .no { font-size: 11px; color: var(--sub); }
+.bar .chords { display: flex; gap: 4px; flex: 1; align-items: stretch; }
+.chord { flex: 1 1 0; border: 0; border-radius: 6px; background: transparent; font-size: 22px; font-weight: 600; padding: 4px; min-height: 0; }
+.chord.sel { background: var(--sel); }
+.chord.playing { outline: 2px solid var(--accent); }
+.tools { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-bottom: 12px; }
+.tools h3 { margin: 0 0 6px; font-size: 12px; color: var(--sub); font-weight: 500; }
+.tools .row { margin-bottom: 8px; }
+.pal button { font-weight: 600; min-width: 52px; }
+.chip { font-size: 13px; padding: 6px 10px; min-height: 34px; }
+textarea#memo { width: 100%; min-height: 90px; }
+.tabs button { flex: 1; }
+.staffwrap { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 4px; margin-bottom: 12px; touch-action: manipulation; }
+svg.staff { display: block; width: 100%; user-select: none; -webkit-user-select: none; }
+[hidden] { display: none !important; }
+.hint { color: var(--sub); font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <div class="side-head"><b>スケッチ</b><button id="newSketch">＋ 新規</button></div>
+    <ul id="sketchList"></ul>
+  </aside>
+  <main>
+    <div class="row">
+      <button id="sideToggle" title="スケッチ一覧">☰</button>
+      <input id="title" placeholder="タイトル">
+      <button id="undo" title="Undo (⌘Z)">↶</button>
+      <button id="redo" title="Redo (⇧⌘Z)">↷</button>
+    </div>
+    <div class="row">
+      <button id="play" class="primary">▶ 再生</button>
+      <button id="loop" title="ループ">⟳ ループ</button>
+      <label>♩= <input id="tempo" type="number" min="30" max="300"></label>
+      <label>拍子 <select id="timeSig"></select></label>
+      <label>Key <select id="key"></select></label>
+      <label>伴奏 <select id="pattern"></select></label>
+    </div>
+    <div class="row tabs">
+      <button id="tabChord" class="on">コード</button>
+      <button id="tabScore">譜面</button>
+    </div>
+    <div id="scoreView" hidden><div id="scoreMount"></div></div>
+    <div id="chordTop">
+    <input id="prog" class="prog" placeholder="C | Am | F | G" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div id="progMsg"></div>
+    <div id="grid" class="grid"></div>
+    </div>
+    <div class="tools" id="chordTools">
+      <h3>コードを選んでタップ（小節を選択して置き換え / 未選択なら末尾に追加）</h3>
+      <div class="row pal" id="palette"></div>
+      <div class="row" id="qualities"></div>
+      <h3>ベース音（C/D のオンコード。もう一度タップで解除。入力欄に C/D と直接打ってもOK）</h3>
+      <div class="row" id="basses"></div>
+      <h3>小節の操作（選択中の小節）</h3>
+      <div class="row" id="barOps">
+        <button data-op="dup">複製</button>
+        <button data-op="repeat">×2 繰り返し</button>
+        <button data-op="insert">空小節を挿入</button>
+        <button data-op="left">◀ 前へ</button>
+        <button data-op="right">次へ ▶</button>
+        <button data-op="delete">削除</button>
+        <button data-op="up">移調 +1</button>
+        <button data-op="down">移調 −1</button>
+      </div>
+    </div>
+    <textarea id="memo" placeholder="テキストメモ（歌詞・方向性・次にやること）"></textarea>
+    <p class="hint">Enter: 反映して再生 / Space: 再生・停止（入力欄以外） / ←→: 小節選択 / Delete: 小節削除 / ⌘Z: Undo / 入力欄では「Am Dm」のように空白で小節内分割</p>
+  </main>
+</div>
+<script src="core.js"></script>
+<script src="audio.js"></script>
+<script src="score.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
