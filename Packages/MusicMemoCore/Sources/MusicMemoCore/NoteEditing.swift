@@ -106,9 +106,6 @@ public enum NoteEditing {
     }
 
     /// 選んだ音（タイでつながった一続き、または休符1つ）を ticks だけずらし、音高を pitch にする（休符は音高を無視）。
-    /// - 移動先は上書き方式：同じ位置・同じ長さの音とは和音になり、それ以外の重なる音は消すか手前で切り詰める。
-    /// - 小節線をまたぐ長さは分けてタイでつなぐ。前後の音とのタイは外れる。曲の範囲からははみ出さない。
-    /// - Returns: 動かした後の音の ID（開始順）。動かなければ元の ID。
     @discardableResult
     public static func move(
         ids: Set<Note.ID>,
@@ -118,44 +115,131 @@ public enum NoteEditing {
         timeSignature: TimeSignature,
         totalTicks: Tick
     ) -> [Note.ID] {
-        let moving = track.notes.filter { ids.contains($0.id) }
-        guard let start = moving.map(\.start).min(), let end = moving.map(\.end).max() else { return [] }
-        let length = end - start
-        let originalPitch = moving[0].pitch
-        let newPitch = originalPitch == nil ? nil : min(max(pitch ?? originalPitch!, 0), 127)
-        let newStart = min(max(start + ticks, 0), max(totalTicks - length, 0))
-        guard newStart != start || newPitch != originalPitch else { return moving.map(\.id) }
+        move(ids: ids, by: ticks, pitch: { original in pitch ?? original }, in: &track,
+             timeSignature: timeSignature, totalTicks: totalTicks)
+    }
 
+    /// 選んだ音（タイでつながった一続きや休符をいくつでも）をまとめて ticks だけずらし、音高を pitch で変える（休符は横にだけ動く）。
+    /// - 選んだ音どうしの並びは保つ（選んだ音どうしは消し合わない）。曲の端では、まとまり全体で止まる。
+    /// - 移動先は上書き方式：同じ位置・同じ長さの音とは和音になり、それ以外の重なる音は消すか手前で切り詰める。
+    /// - 小節線をまたぐ長さは分けてタイでつなぐ。前後の音とのタイは外れる。
+    /// - Returns: 動かした後の音の ID（開始順）。動かなければ元の ID。
+    @discardableResult
+    public static func move(
+        ids: Set<Note.ID>,
+        by ticks: Tick,
+        pitch transform: (MIDINote) -> MIDINote,
+        in track: inout Track,
+        timeSignature: TimeSignature,
+        totalTicks: Tick
+    ) -> [Note.ID] {
+        let moving = track.notes.filter { ids.contains($0.id) }
+        guard let groupStart = moving.map(\.start).min(), let groupEnd = moving.map(\.end).max() else { return [] }
+        let delta = min(max(ticks, -groupStart), max(totalTicks - groupEnd, -groupStart))
+
+        // 選んだ音を、タイでつながった一続きごとに分ける
+        var chains: [[Note]] = []
+        var seen = Set<Note.ID>()
+        for note in moving where !seen.contains(note.id) {
+            let chain = tiedChain(containing: note.id, in: moving)
+            seen.formUnion(chain.map(\.id))
+            chains.append(chain)
+        }
+        let moves = chains.map { chain -> (range: Range<Tick>, pitch: MIDINote?) in
+            let pitch = chain[0].pitch.map { min(max(transform($0), 0), 127) }
+            return ((chain[0].start + delta)..<(chain[chain.count - 1].end + delta), pitch)
+        }
+        let unchanged = delta == 0 && zip(chains, moves).allSatisfy { $0.0[0].pitch == $0.1.pitch }
+        guard !unchanged else { return moving.map(\.id) }
+
+        // 元の位置で重なっていた音（和音のために分けてタイでつないでいた音）。跡に残るので、あとで切れ端をまとめ直す
+        let vacated = Set(track.notes.filter { note in
+            !ids.contains(note.id) && !note.isRest && moving.contains { $0.start < note.end && note.start < $0.end }
+        }.map(\.id))
         delete(ids: ids, in: &track)
-        let range = newStart..<(newStart + length)
-        let segments = split(range, timeSignature: timeSignature)
-        var placed: [Note] = []
-        if let newPitch {
-            // 同じ位置・同じ長さで鳴っている別の音高の音は残して和音にする
-            let joinsChord = { (note: Note) in
-                note.pitch != nil && note.pitch != newPitch
-                    && segments.contains { $0.lowerBound == note.start && $0.count == note.duration }
+
+        // 動かした音（タイの一続きは1つの長い音として扱い、最後に分ける）。同じ位置・同じ高さには重ねない
+        var occupied = Set<[Int]>()
+        let targets = moves
+            .map { Note(start: $0.range.lowerBound, duration: $0.range.count, pitch: $0.pitch) }
+            .filter { occupied.insert([$0.start, $0.pitch ?? -1]).inserted }
+        let targetNotes = targets.filter { !$0.isRest }
+
+        // 移動先と重なる音（1）：同じ高さの音・休符とは重ねられないので、消すか手前で切り詰める（上書き）
+        track.notes = track.notes.compactMap { note in
+            let overwriting = targets.filter {
+                $0.start < note.end && note.start < $0.end && ($0.isRest || note.isRest || $0.pitch == note.pitch)
             }
-            let kept = track.notes.filter(joinsChord)
-            track.notes.removeAll(where: joinsChord)
-            clear(&track.notes, from: range.lowerBound, to: range.upperBound)
-            track.notes += kept
-            for (index, segment) in segments.enumerated() {
-                placed.append(Note(start: segment.lowerBound, duration: segment.count, pitch: newPitch,
-                                   tiesToNext: index < segments.count - 1))
-            }
-            // 手前の同じ音高の音からのタイは外す
-            for index in track.notes.indices where track.notes[index].end == newStart && track.notes[index].pitch == newPitch {
+            guard let firstStart = overwriting.map(\.start).min() else { return note }
+            guard note.start < firstStart else { return nil }
+            var trimmed = note
+            trimmed.duration = firstStart - note.start
+            trimmed.tiesToNext = false
+            return trimmed
+        }
+        // 前の音から動かした音へのタイは外す
+        for index in track.notes.indices where track.notes[index].tiesToNext {
+            if let pitch = track.notes[index].pitch, targetNotes.contains(where: { $0.pitch == pitch && $0.start == track.notes[index].end }) {
                 track.notes[index].tiesToNext = false
             }
-        } else {
-            clear(&track.notes, from: range.lowerBound, to: range.upperBound)
-            placed = segments.map { Note.rest(start: $0.lowerBound, duration: $0.count) }
+        }
+
+        // 移動先と重なる音（2）：別の高さの音とは和音にする。開始位置や長さが違えば、互いの境目で分けてタイでつなぐ
+        // （例：全音符の途中へ動かすと、全音符は2つに分かれてタイでつながる）。
+        // 関わる音（重なる音と、それに重なる音、元の位置で重なっていた音）は、タイの一続きを1つにまとめてから分け直すので、
+        // 何度動かしても切れ端が増えない
+        var involved = Set<Note.ID>()
+        var frontier = track.notes.filter { note in
+            !note.isRest && (vacated.contains(note.id) || targetNotes.contains { $0.start < note.end && note.start < $0.end })
+        }
+        while let note = frontier.popLast() {
+            guard !involved.contains(note.id) else { continue }
+            for member in tiedChain(containing: note.id, in: track.notes) where !involved.contains(member.id) {
+                involved.insert(member.id)
+                frontier += track.notes.filter { other in
+                    !other.isRest && !involved.contains(other.id) && other.start < member.end && member.start < other.end
+                }
+            }
+        }
+        var merged: [Note] = []
+        var mergedIDs = Set<Note.ID>()
+        for note in track.notes where involved.contains(note.id) && !mergedIDs.contains(note.id) {
+            let chain = tiedChain(containing: note.id, in: track.notes)
+            mergedIDs.formUnion(chain.map(\.id))
+            merged.append(Note(id: chain[0].id, start: chain[0].start, duration: chain[chain.count - 1].end - chain[0].start,
+                               pitch: chain[0].pitch))
+        }
+        let boundaries = Set((merged + targetNotes).flatMap { [$0.start, $0.end] })
+        track.notes.removeAll { involved.contains($0.id) }
+        track.notes += merged.flatMap { cut($0, at: boundaries, timeSignature: timeSignature) }
+
+        var placed: [Note] = []
+        for target in targets {
+            if target.isRest {
+                placed += split(target.start..<target.end, timeSignature: timeSignature).map { Note.rest(start: $0.lowerBound, duration: $0.count) }
+            } else {
+                placed += cut(target, at: boundaries, timeSignature: timeSignature)
+            }
         }
         track.notes += placed
         removeDanglingTies(&track.notes)
         sort(&track.notes)
         return placed.map(\.id)
+    }
+
+    /// 音符を、内側にある境目と小節線で分け、タイでつなぐ（最初の部分は元の ID、最後の部分は元のタイを引き継ぐ）。
+    static func cut(_ note: Note, at boundaries: Set<Tick>, timeSignature: TimeSignature) -> [Note] {
+        let points = [note.start] + boundaries.filter { $0 > note.start && $0 < note.end }.sorted() + [note.end]
+        var pieces: [Note] = []
+        for index in 0..<(points.count - 1) {
+            for segment in split(points[index]..<points[index + 1], timeSignature: timeSignature) {
+                pieces.append(Note(start: segment.lowerBound, duration: segment.count, pitch: note.pitch, tiesToNext: true))
+            }
+        }
+        guard pieces.count > 1 else { return [pieces.first ?? note].map { var single = $0; single.id = note.id; single.tiesToNext = note.tiesToNext; return single } }
+        pieces[0].id = note.id
+        pieces[pieces.count - 1].tiesToNext = note.tiesToNext
+        return pieces
     }
 
     /// つなぐ先（ちょうど終わる位置で始まる同じ音高の音）が無いタイを外す。

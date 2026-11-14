@@ -1,5 +1,8 @@
 import MusicMemoCore
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// 譜面ビュー。全トラックを縦に並べ、各トラックを改行しない横一行の五線で表示する。
 /// 左にトラック情報列（固定）、右に縦スクロール列。全トラックは同じ横位置でスクロールする。
@@ -15,6 +18,8 @@ struct ScoreView: View {
     @State private var didInitialScroll = false
     /// Mac のマウスドラッグ：始めた位置の音符（nil = まだ判定していない、.some(nil) = 音符の外から始めた）。
     @State private var mouseDragNote: Note.ID??
+    /// iPad の範囲選択：長押しした位置。
+    @State private var boxStart: CGPoint?
 
     private struct VerticalMetrics: Equatable {
         var offset: CGFloat = 0
@@ -241,6 +246,28 @@ struct ScoreView: View {
         return StaffRowView.hitNote(at: location, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
     }
 
+    /// 範囲選択の箱を広げる。箱は行の中に収め、左端の音部記号の下は含めない。
+    private func updateBox(from start: CGPoint, to end: CGPoint, track: Track, layout: ScoreLayout, rowHeight: CGFloat) {
+        let visibleLeft = store.horizontalOffset + layout.stickyWidth
+        let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
+            .intersection(CGRect(x: visibleLeft, y: 0, width: max(layout.contentWidth - visibleLeft, 0), height: rowHeight))
+        guard !rect.isNull else {
+            store.updateBoxSelection(rect: .zero, hits: [])
+            return
+        }
+        let hits = StaffRowView.notes(in: rect, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
+        store.updateBoxSelection(rect: rect, hits: hits)
+    }
+
+    /// Mac で ⇧を押しているか（⇧クリック・⇧＋箱で選択に足す）。
+    private static var isShiftDown: Bool {
+        #if os(macOS)
+        NSEvent.modifierFlags.contains(.shift)
+        #else
+        false
+        #endif
+    }
+
     private func staffRows(layout: ScoreLayout, rowHeight: CGFloat) -> some View {
         ScrollView(.horizontal) {
             VStack(spacing: 0) {
@@ -250,14 +277,16 @@ struct ScoreView: View {
                         track: track, sketch: store.sketch, editor: store.editor, layout: layout, rowHeight: rowHeight,
                         selectedNoteIDs: isSelectedTrack ? store.selectedNoteIDs : [],
                         dragPreview: isSelectedTrack ? store.noteDrag?.preview ?? [] : [],
+                        selectionBox: store.selectionBox.flatMap { $0.trackID == track.id ? $0.rect : nil },
                         onDragSelection: { store.dragSelection(translation: $0) },
                         onEndDragSelection: { store.endDragSelection() }
                     )
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                     .onTapGesture { location in
-                        // 音符（休符）の上なら選ぶ。それ以外は、タップしたトラックを選び、編集位置もそこへ動かす
+                        // 音符（休符）の上なら選ぶ（Mac の ⇧クリックは足す／外す）。
+                        // それ以外は、タップしたトラックを選び、編集位置もそこへ動かす
                         if let note = hitNote(at: location, track: track, layout: layout, rowHeight: rowHeight) {
-                            store.selectNote(note, track: track.id)
+                            store.selectNote(note, track: track.id, toggles: Self.isShiftDown)
                             return
                         }
                         store.clearNoteSelection()
@@ -265,26 +294,50 @@ struct ScoreView: View {
                         store.setEditPosition(layout.tick(atContentX: location.x, grid: RulerView.seekGrid))
                     }
                     #if os(macOS)
-                    // Mac はマウスのドラッグで譜面がスクロールしないので、選んでいない音符もそのままつかんで動かせる
+                    // Mac はマウスのドラッグで譜面がスクロールしないので、
+                    // 音符の上から始めたら（選んでいなくても）つかんで動かし、何も無い所から始めたら範囲選択の箱を出す
                     .gesture(
                         DragGesture(minimumDistance: 3)
                             .onChanged { drag in
                                 if mouseDragNote == nil {
                                     let note = hitNote(at: drag.startLocation, track: track, layout: layout, rowHeight: rowHeight)
                                     mouseDragNote = .some(note)
-                                    if let note, !store.selectedNoteIDs.contains(note) || !isSelectedTrack {
-                                        store.selectNote(note, track: track.id)
+                                    if let note {
+                                        if !isSelectedTrack || !store.selectedNoteIDs.contains(note) {
+                                            store.selectNote(note, track: track.id, toggles: Self.isShiftDown)
+                                        }
+                                    } else {
+                                        store.beginBoxSelection(track: track.id, adding: Self.isShiftDown)
                                     }
                                 }
                                 if case .some(.some) = mouseDragNote {
                                     store.dragSelection(translation: drag.translation)
+                                } else {
+                                    updateBox(from: drag.startLocation, to: drag.location, track: track, layout: layout, rowHeight: rowHeight)
                                 }
                             }
                             .onEnded { _ in
-                                if case .some(.some) = mouseDragNote { store.endDragSelection() }
+                                if case .some(.some) = mouseDragNote { store.endDragSelection() } else { store.endBoxSelection() }
                                 mouseDragNote = nil
                             }
                     )
+                    #else
+                    // iPad：長押ししてからドラッグすると範囲選択の箱（普通のドラッグは譜面のスクロール）
+                    .gesture(LongPressDragGesture(
+                        onBegan: { location in
+                            boxStart = location
+                            store.beginBoxSelection(track: track.id, adding: false)
+                            updateBox(from: location, to: location, track: track, layout: layout, rowHeight: rowHeight)
+                        },
+                        onChanged: { location in
+                            guard let start = boxStart else { return }
+                            updateBox(from: start, to: location, track: track, layout: layout, rowHeight: rowHeight)
+                        },
+                        onEnded: {
+                            boxStart = nil
+                            store.endBoxSelection()
+                        }
+                    ))
                     #endif
                 }
             }

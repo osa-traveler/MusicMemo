@@ -12,6 +12,8 @@ struct StaffRowView: View {
     var selectedNoteIDs: Set<Note.ID> = []
     /// ドラッグ中の移動先（半透明の青で出す）。
     var dragPreview: [Note] = []
+    /// 範囲選択の箱（行の座標）。
+    var selectionBox: CGRect?
     /// 選んだ音符をドラッグしている（移動量）／離した。
     var onDragSelection: (CGSize) -> Void = { _ in }
     var onEndDragSelection: () -> Void = {}
@@ -40,6 +42,14 @@ struct StaffRowView: View {
             .min { $0.1 < $1.1 }?.0
         guard let hit else { return nil }
         return track.notes.first { $0.start == hit.start && $0.pitch == hit.pitch }?.id
+    }
+
+    /// 箱（行の座標）の中に符頭（休符）の中心がある音符。
+    static func notes(in rect: CGRect, track: Track, sketch: Sketch, layout: ScoreLayout, rowHeight: CGFloat) -> [Note.ID] {
+        let chords = notation(of: track, sketch: sketch, layout: layout).chords
+        let drawing = NoteDrawing(layout: layout, bottomLineY: layout.bottomLineY(rowHeight: rowHeight), color: Palette.ink)
+        let hits = drawing.hitTargets(chords).filter { rect.contains($0.center) }
+        return track.notes.filter { note in hits.contains { $0.start == note.start && $0.pitch == note.pitch } }.map(\.id)
     }
 
     var body: some View {
@@ -85,6 +95,11 @@ struct StaffRowView: View {
                     selection.drawSelected(chord, pitches: Set(here.compactMap(\.pitch)), in: context)
                 }
             }
+            if let selectionBox {
+                let box = Path(selectionBox.insetBy(dx: 0.5, dy: 0.5))
+                context.fill(box, with: .color(Palette.accent.opacity(0.08)))
+                context.stroke(box, with: .color(Palette.accent.opacity(0.7)), lineWidth: 1)
+            }
             if !dragPreview.isEmpty {
                 drawDragPreview(bottomLineY: bottom, in: context)
             } else if isSelected, selectedNotes.isEmpty {
@@ -98,6 +113,7 @@ struct StaffRowView: View {
     }
 
     /// 選んだ音符の上に置くドラッグ用の領域。ここから始めたドラッグだけを移動にし、それ以外は譜面のスクロールに任せる（iPad）。
+    /// 複数選んでいるときは、どれをつかんでも全部が一緒に動く。
     private func selectionHandles(chords: [NotatedChord], selectedNotes: [Note]) -> some View {
         let drawing = NoteDrawing(layout: layout, bottomLineY: layout.bottomLineY(rowHeight: rowHeight), color: Palette.accent)
         let targets = drawing.hitTargets(chords).filter { target in

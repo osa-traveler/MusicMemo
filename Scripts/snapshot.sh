@@ -1,10 +1,11 @@
 #!/bin/zsh
 # Mac のデバッグビルドで画面を撮影する（開発用）。
-# 使い方：Scripts/snapshot.sh 出力ファイル.png [倍率] [入力デモ 0/1/2]
+# 使い方：Scripts/snapshot.sh 出力ファイル.png [倍率] [入力デモ 0/1/2/3/4]
 #   例：Scripts/snapshot.sh /tmp/main.png        … サンプル曲を 100% で
 #       Scripts/snapshot.sh /tmp/zoom.png 2      … 200% で
 #       Scripts/snapshot.sh /tmp/demo.png 1 1    … 入力デモを流してから
-#       Scripts/snapshot.sh /tmp/sel.png 1 2     … 入力デモに続けて、音符の選択・移動・削除を流してから
+#       Scripts/snapshot.sh /tmp/sel.png 1 2     … 入力デモに続けて、音符の選択・移動・削除・範囲選択を流してから
+#       Scripts/snapshot.sh /tmp/box.png 1 3     … 同じく、範囲選択の箱を出したところで
 # ビルドは .build/DerivedData に置く（Xcode から実行しているアプリとは別物）。
 # 撮影には画面収録の権限が要らない（アプリ自身がウィンドウを PNG に書き出す。App/Debug/DebugSnapshot.swift）。
 set -euo pipefail

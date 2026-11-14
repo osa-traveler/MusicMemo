@@ -52,7 +52,8 @@ final class SketchStore {
     /// 選んだ音符のドラッグ中の状態（離すまで曲は変えず、移動先を半透明で出す）。
     struct NoteDrag {
         var ticks: Tick
-        var pitch: MIDINote?
+        /// 上下に動かす段数（五線の1段 = 調の音階の1音）。
+        var steps: Int
         /// 移動先に置かれる音符（動いていなければ空）。
         var preview: [Note]
     }
@@ -319,26 +320,82 @@ final class SketchStore {
 
     var hasNoteSelection: Bool { !selectedNotes.isEmpty }
 
-    /// 音符（休符）を選ぶ。そのトラックも選ぶ。タイでつながった音は一続きで選ぶ。音符なら音を鳴らす。
-    func selectNote(_ id: Note.ID, track trackID: Track.ID) {
+    /// 選んだ音符のうち、動かすときの基準にする音（一番早い位置の、一番高い音）。横の移動量と、鳴らす音に使う。
+    private var anchorNote: Note? {
+        selectedNotes.min { ($0.start, -($0.pitch ?? -1)) < ($1.start, -($1.pitch ?? -1)) }
+    }
+
+    /// タイでつながった音は一続きで選ぶ。
+    private func withTiedChains(_ ids: some Sequence<Note.ID>) -> Set<Note.ID> {
+        guard let notes = selectedTrack?.notes else { return [] }
+        var result = Set<Note.ID>()
+        for id in ids where !result.contains(id) {
+            result.formUnion(NoteEditing.tiedChain(containing: id, in: notes).map(\.id))
+        }
+        return result
+    }
+
+    /// 音符（休符）を選ぶ。そのトラックも選ぶ。音符なら音を鳴らす。
+    /// toggles（Mac の ⇧クリック）なら、今の選択に足す（選んであれば外す）。
+    func selectNote(_ id: Note.ID, track trackID: Track.ID, toggles: Bool = false) {
         guard !isPlaying else { return }
         selectTrack(trackID)
-        guard let track = selectedTrack else { return }
-        let chain = NoteEditing.tiedChain(containing: id, in: track.notes)
-        selectedNoteIDs = Set(chain.map(\.id))
+        let chain = withTiedChains([id])
         noteDrag = nil
-        if let pitch = chain.first?.pitch { audition(pitch) }
+        if toggles {
+            selectedNoteIDs = selectedNoteIDs.isSuperset(of: chain) ? selectedNoteIDs.subtracting(chain) : selectedNoteIDs.union(chain)
+        } else {
+            selectedNoteIDs = chain
+        }
+        if selectedNoteIDs.isSuperset(of: chain), let pitch = selectedTrack?.notes.first(where: { $0.id == id })?.pitch {
+            audition(pitch)
+        }
     }
 
     func clearNoteSelection() {
         selectedNoteIDs = []
         noteDrag = nil
+        selectionBox = nil
     }
 
-    /// 矢印キー：選んだ音符を ticks だけずらし、semitones 半音だけ上下する。
+    // MARK: 範囲選択
+
+    /// 範囲選択の箱（トラックと、その行の座標）。
+    struct SelectionBox {
+        var trackID: Track.ID
+        var rect: CGRect
+    }
+    private(set) var selectionBox: SelectionBox?
+    /// 範囲選択を始める前の選択（⇧＋箱で足すとき）。
+    private var boxBaseSelection: Set<Note.ID> = []
+
+    /// 範囲選択を始める。箱はドラッグを始めたトラックの中だけ。adding（Mac の ⇧）なら今の選択に足す。
+    func beginBoxSelection(track trackID: Track.ID, adding: Bool) {
+        guard !isPlaying else { return }
+        selectTrack(trackID)
+        boxBaseSelection = adding ? selectedNoteIDs : []
+        selectedNoteIDs = boxBaseSelection
+        noteDrag = nil
+        selectionBox = SelectionBox(trackID: trackID, rect: .zero)
+    }
+
+    /// 箱を広げる。hits は箱の中に符頭がある音符（ドラッグ中から選んだ表示にする）。
+    func updateBoxSelection(rect: CGRect, hits: [Note.ID]) {
+        guard let box = selectionBox else { return }
+        selectionBox = SelectionBox(trackID: box.trackID, rect: rect)
+        selectedNoteIDs = boxBaseSelection.union(withTiedChains(hits))
+    }
+
+    func endBoxSelection() {
+        selectionBox = nil
+        boxBaseSelection = []
+    }
+
+    // MARK: 移動・削除
+
+    /// 矢印キー：選んだ音符を全部 ticks だけずらし、semitones 半音だけ上下する。
     func nudgeSelection(ticks: Tick = 0, semitones: Int = 0) {
-        guard let first = selectedNotes.first else { return }
-        moveSelection(by: ticks, to: first.pitch.map { $0 + semitones })
+        moveSelection(by: ticks, pitch: { $0 + semitones })
     }
 
     /// 選んだ音符を消す（跡は空白のまま）。
@@ -351,54 +408,58 @@ final class SketchStore {
     }
 
     /// ドラッグ中：横は16分単位、縦は五線の1段（調の音階の音）単位で移動先を決め、半透明で出す。
+    /// 複数選んでいるときは、全部を同じ量（同じ段数）だけ動かす。
     func dragSelection(translation: CGSize) {
-        let notes = selectedNotes
-        guard !isPlaying, let track = selectedTrack, let start = notes.map(\.start).min() else { return }
+        guard !isPlaying, let track = selectedTrack, let anchor = anchorNote else { return }
         let layout = layout
         let grid = RulerView.seekGrid
         var ticks: Tick = 0
         if abs(translation.width) >= CGFloat(grid) * layout.pointsPerTick / 2 {
-            ticks = layout.tick(atContentX: layout.x(tick: start) + translation.width, grid: grid) - start
+            ticks = layout.tick(atContentX: layout.x(tick: anchor.start) + translation.width, grid: grid) - anchor.start
         }
-        let originalPitch = notes.first?.pitch
-        var pitch = originalPitch
-        if let originalPitch {
-            let steps = Int((-translation.height / (layout.staffSpace / 2)).rounded())
-            if steps != 0 {
-                let position = track.clef.staffPosition(of: SpelledPitch(originalPitch, in: sketch.key))
-                pitch = min(max(track.clef.pitch(atStaffPosition: position + steps, in: sketch.key), 0), 127)
-            }
+        let steps = Int((-translation.height / (layout.staffSpace / 2)).rounded())
+        let key = sketch.key
+        let clef = track.clef
+        let transform = { (pitch: MIDINote) -> MIDINote in
+            guard steps != 0 else { return pitch }
+            return clef.pitch(atStaffPosition: clef.staffPosition(of: SpelledPitch(pitch, in: key)) + steps, in: key)
         }
-        if let pitch, pitch != (noteDrag?.pitch ?? originalPitch) { audition(pitch) }
+        if let pitch = anchor.pitch.map(transform), steps != noteDrag?.steps ?? 0 {
+            audition(min(max(pitch, 0), 127))
+        }
 
         var preview: [Note] = []
-        if ticks != 0 || pitch != originalPitch {
+        if ticks != 0 || steps != 0 {
             var copy = track
-            let ids = Set(NoteEditing.move(ids: selectedNoteIDs, by: ticks, to: pitch, in: &copy,
+            let ids = Set(NoteEditing.move(ids: selectedNoteIDs, by: ticks, pitch: transform, in: &copy,
                                            timeSignature: sketch.timeSignature, totalTicks: sketch.totalTicks))
             preview = copy.notes.filter { ids.contains($0.id) }
         }
-        noteDrag = NoteDrag(ticks: ticks, pitch: pitch, preview: preview)
+        noteDrag = NoteDrag(ticks: ticks, steps: steps, preview: preview)
     }
 
     /// ドラッグを離した：移動先へ動かす。
     func endDragSelection() {
-        guard let drag = noteDrag else { return }
+        guard let drag = noteDrag, let track = selectedTrack else { return }
         noteDrag = nil
-        moveSelection(by: drag.ticks, to: drag.pitch, playsSound: false)
+        let key = sketch.key
+        let clef = track.clef
+        moveSelection(by: drag.ticks, pitch: { pitch in
+            drag.steps == 0 ? pitch : clef.pitch(atStaffPosition: clef.staffPosition(of: SpelledPitch(pitch, in: key)) + drag.steps, in: key)
+        }, playsSound: false)
     }
 
-    private func moveSelection(by ticks: Tick, to pitch: MIDINote?, playsSound: Bool = true) {
-        guard !isPlaying, let trackIndex = selectedTrackIndex, let original = selectedNotes.first else { return }
+    private func moveSelection(by ticks: Tick, pitch transform: (MIDINote) -> MIDINote, playsSound: Bool = true) {
+        guard !isPlaying, let trackIndex = selectedTrackIndex, let anchor = anchorNote else { return }
         var track = sketch.tracks[trackIndex]
-        let ids = NoteEditing.move(ids: selectedNoteIDs, by: ticks, to: pitch, in: &track,
+        let ids = NoteEditing.move(ids: selectedNoteIDs, by: ticks, pitch: transform, in: &track,
                                    timeSignature: sketch.timeSignature, totalTicks: sketch.totalTicks)
         guard track != sketch.tracks[trackIndex] else { return }
         recordUndo()
         sketch.tracks[trackIndex] = track
         selectedNoteIDs = Set(ids)
         lastEntry = nil
-        if playsSound, let pitch, pitch != original.pitch { audition(min(max(pitch, 0), 127)) }
+        if playsSound, let pitch = anchor.pitch, transform(pitch) != pitch { audition(min(max(transform(pitch), 0), 127)) }
     }
 
     /// 選択中のトラックの音色で短く鳴らす（音符を選んだとき・上下に動かしたとき）。
