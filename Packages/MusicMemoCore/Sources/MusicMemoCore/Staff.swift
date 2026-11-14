@@ -97,4 +97,12 @@ extension Clef {
     public func staffPosition(of pitch: SpelledPitch) -> Int {
         pitch.diatonicStep - bottomLineStep
     }
+
+    /// 五線上の位置にある、調の音階の音（調号どおりに変化させた幹音）。譜面上で音符を上下に動かすときに使う。
+    public func pitch(atStaffPosition position: Int, in key: Key) -> MIDINote {
+        let step = position + bottomLineStep
+        let octave = Int((Double(step) / 7).rounded(.down))
+        let letter = step - octave * 7
+        return (octave + 1) * 12 + SpelledPitch.letterPitchClasses[letter] + KeySignature(key).alter(forLetter: letter)
+    }
 }

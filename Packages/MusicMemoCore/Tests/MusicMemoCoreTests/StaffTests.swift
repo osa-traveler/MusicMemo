@@ -67,4 +67,17 @@ struct StaffTests {
         #expect(bb.letters == [6, 2])                         // Bb Eb
         #expect(bb.staffPositions(for: .treble) == [4, 7])    // B4, E5
     }
+
+    @Test func pitchAtStaffPositionFollowsKey() {
+        // ト音記号：第1線 E4、第3線 B4、加線の下 C4
+        #expect(Clef.treble.pitch(atStaffPosition: 0, in: .cMajor) == 64)
+        #expect(Clef.treble.pitch(atStaffPosition: -2, in: .cMajor) == 60)
+        // ヘ音記号：第1線 G2
+        #expect(Clef.bass.pitch(atStaffPosition: 0, in: .cMajor) == 43)
+        // G major の第5線（F5）は F♯5、D major の C は C♯
+        #expect(Clef.treble.pitch(atStaffPosition: 8, in: Key(tonic: 7, mode: .major)) == 78)
+        #expect(Clef.treble.pitch(atStaffPosition: -2, in: Key(tonic: 2, mode: .major)) == 61)
+        // F major の B は B♭
+        #expect(Clef.treble.pitch(atStaffPosition: 4, in: Key(tonic: 5, mode: .major)) == 70)
+    }
 }

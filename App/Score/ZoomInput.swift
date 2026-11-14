@@ -58,7 +58,7 @@ extension FocusedValues {
     @Entry var sketchStore: SketchStore?
 }
 
-/// メニュー：再生（再生／停止・ループ・メトロノーム）、編集（元に戻す／やり直す／戻って消す）、表示（拡大／縮小／100%に戻す）。
+/// メニュー：再生（再生／停止・ループ・メトロノーム）、編集（元に戻す／やり直す／戻って消す／選んだ音の移動）、表示（拡大／縮小／100%に戻す）。
 struct SketchCommands: Commands {
     @FocusedValue(\.sketchStore) private var store
 
@@ -82,9 +82,28 @@ struct SketchCommands: Commands {
                 .keyboardShortcut("z", modifiers: [.command, .shift])
                 .disabled(store?.canRedo != true)
             Divider()
-            Button("戻って消す") { store?.backspace() }
+            Button(store?.hasNoteSelection == true ? "選んだ音を消す" : "戻って消す") { store?.deleteKey() }
                 .keyboardShortcut(.delete, modifiers: [])
                 .disabled(store == nil)
+            Divider()
+            // 選んだ音符の移動（←→ 16分、↑↓ 半音、⇧↑↓ オクターブ）
+            Group {
+                Button("選んだ音を左へ") { store?.nudgeSelection(ticks: -RulerView.seekGrid) }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+                Button("選んだ音を右へ") { store?.nudgeSelection(ticks: RulerView.seekGrid) }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+                Button("選んだ音を半音上げる") { store?.nudgeSelection(semitones: 1) }
+                    .keyboardShortcut(.upArrow, modifiers: [])
+                Button("選んだ音を半音下げる") { store?.nudgeSelection(semitones: -1) }
+                    .keyboardShortcut(.downArrow, modifiers: [])
+                Button("選んだ音を1オクターブ上げる") { store?.nudgeSelection(semitones: 12) }
+                    .keyboardShortcut(.upArrow, modifiers: .shift)
+                Button("選んだ音を1オクターブ下げる") { store?.nudgeSelection(semitones: -12) }
+                    .keyboardShortcut(.downArrow, modifiers: .shift)
+                Button("選択を解除") { store?.clearNoteSelection() }
+                    .keyboardShortcut(.escape, modifiers: [])
+            }
+            .disabled(store?.hasNoteSelection != true || store?.isPlaying == true)
         }
         CommandGroup(after: .toolbar) {
             Button("拡大") { store?.stepZoom(1) }

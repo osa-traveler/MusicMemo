@@ -80,6 +80,93 @@ public enum NoteEditing {
         return start
     }
 
+    // MARK: 選んだ音の移動・削除
+
+    /// タイでつながった一続きの音（同じ音高）。休符はそれ1つだけ。開始順。
+    public static func tiedChain(containing id: Note.ID, in notes: [Note]) -> [Note] {
+        guard let note = notes.first(where: { $0.id == id }) else { return [] }
+        guard let pitch = note.pitch else { return [note] }
+        var chain = [note]
+        // 前へ：同じ音高で、ちょうどこの音で終わり、タイでつないでいる音
+        while let previous = notes.first(where: { $0.end == chain[0].start && $0.pitch == pitch && $0.tiesToNext }) {
+            chain.insert(previous, at: 0)
+        }
+        // 後ろへ
+        while chain[chain.count - 1].tiesToNext,
+              let next = notes.first(where: { $0.start == chain[chain.count - 1].end && $0.pitch == pitch }) {
+            chain.append(next)
+        }
+        return chain
+    }
+
+    /// 選んだ音を消す。消した音へ向かっていたタイは外す。跡は空白のまま（休符で埋めない）。
+    public static func delete(ids: Set<Note.ID>, in track: inout Track) {
+        track.notes.removeAll { ids.contains($0.id) }
+        removeDanglingTies(&track.notes)
+    }
+
+    /// 選んだ音（タイでつながった一続き、または休符1つ）を ticks だけずらし、音高を pitch にする（休符は音高を無視）。
+    /// - 移動先は上書き方式：同じ位置・同じ長さの音とは和音になり、それ以外の重なる音は消すか手前で切り詰める。
+    /// - 小節線をまたぐ長さは分けてタイでつなぐ。前後の音とのタイは外れる。曲の範囲からははみ出さない。
+    /// - Returns: 動かした後の音の ID（開始順）。動かなければ元の ID。
+    @discardableResult
+    public static func move(
+        ids: Set<Note.ID>,
+        by ticks: Tick,
+        to pitch: MIDINote?,
+        in track: inout Track,
+        timeSignature: TimeSignature,
+        totalTicks: Tick
+    ) -> [Note.ID] {
+        let moving = track.notes.filter { ids.contains($0.id) }
+        guard let start = moving.map(\.start).min(), let end = moving.map(\.end).max() else { return [] }
+        let length = end - start
+        let originalPitch = moving[0].pitch
+        let newPitch = originalPitch == nil ? nil : min(max(pitch ?? originalPitch!, 0), 127)
+        let newStart = min(max(start + ticks, 0), max(totalTicks - length, 0))
+        guard newStart != start || newPitch != originalPitch else { return moving.map(\.id) }
+
+        delete(ids: ids, in: &track)
+        let range = newStart..<(newStart + length)
+        let segments = split(range, timeSignature: timeSignature)
+        var placed: [Note] = []
+        if let newPitch {
+            // 同じ位置・同じ長さで鳴っている別の音高の音は残して和音にする
+            let joinsChord = { (note: Note) in
+                note.pitch != nil && note.pitch != newPitch
+                    && segments.contains { $0.lowerBound == note.start && $0.count == note.duration }
+            }
+            let kept = track.notes.filter(joinsChord)
+            track.notes.removeAll(where: joinsChord)
+            clear(&track.notes, from: range.lowerBound, to: range.upperBound)
+            track.notes += kept
+            for (index, segment) in segments.enumerated() {
+                placed.append(Note(start: segment.lowerBound, duration: segment.count, pitch: newPitch,
+                                   tiesToNext: index < segments.count - 1))
+            }
+            // 手前の同じ音高の音からのタイは外す
+            for index in track.notes.indices where track.notes[index].end == newStart && track.notes[index].pitch == newPitch {
+                track.notes[index].tiesToNext = false
+            }
+        } else {
+            clear(&track.notes, from: range.lowerBound, to: range.upperBound)
+            placed = segments.map { Note.rest(start: $0.lowerBound, duration: $0.count) }
+        }
+        track.notes += placed
+        removeDanglingTies(&track.notes)
+        sort(&track.notes)
+        return placed.map(\.id)
+    }
+
+    /// つなぐ先（ちょうど終わる位置で始まる同じ音高の音）が無いタイを外す。
+    static func removeDanglingTies(_ notes: inout [Note]) {
+        let starts = Set(notes.compactMap { note in note.pitch.map { [note.start, $0] } })
+        for index in notes.indices where notes[index].tiesToNext {
+            if let pitch = notes[index].pitch, starts.contains([notes[index].end, pitch]) { continue }
+            notes[index].tiesToNext = false
+        }
+    }
+
     // MARK: 内部
 
     /// [start, end) に重なる音符を消す。手前から食い込んでいる音符は start で切り詰める。

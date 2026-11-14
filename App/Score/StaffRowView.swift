@@ -8,13 +8,46 @@ struct StaffRowView: View {
     let editor: EditorState
     let layout: ScoreLayout
     let rowHeight: CGFloat
+    /// 選んでいる音符（このトラックのもの）。
+    var selectedNoteIDs: Set<Note.ID> = []
+    /// ドラッグ中の移動先（半透明の青で出す）。
+    var dragPreview: [Note] = []
+    /// 選んだ音符をドラッグしている（移動量）／離した。
+    var onDragSelection: (CGSize) -> Void = { _ in }
+    var onEndDragSelection: () -> Void = {}
 
     private var isSelected: Bool { editor.selectedTrackID == track.id }
 
-    var body: some View {
+    /// 描く音符（記譜用に変換したもの）と連桁・3連符のまとまり。
+    struct StaffNotation {
+        var chords: [NotatedChord]
+        var beamGroups: [[Int]]
+        var tuplets: [[Int]]
+    }
+
+    static func notation(of track: Track, sketch: Sketch, layout: ScoreLayout) -> StaffNotation {
         var chords = Notation.chords(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
         let beamGroups = Notation.beamGroups(&chords, timeSignature: layout.timeSignature)
-        let tuplets = Notation.tupletGroups(chords)
+        return StaffNotation(chords: chords, beamGroups: beamGroups, tuplets: Notation.tupletGroups(chords))
+    }
+
+    /// point（行の座標）にある音符・休符。一番近い符頭を選ぶ。
+    static func hitNote(at point: CGPoint, track: Track, sketch: Sketch, layout: ScoreLayout, rowHeight: CGFloat) -> Note.ID? {
+        let chords = notation(of: track, sketch: sketch, layout: layout).chords
+        let drawing = NoteDrawing(layout: layout, bottomLineY: layout.bottomLineY(rowHeight: rowHeight), color: Palette.ink)
+        let hit = drawing.hitTargets(chords)
+            .compactMap { target in target.distance(to: point).map { (target, $0) } }
+            .min { $0.1 < $1.1 }?.0
+        guard let hit else { return nil }
+        return track.notes.first { $0.start == hit.start && $0.pitch == hit.pitch }?.id
+    }
+
+    var body: some View {
+        let notation = Self.notation(of: track, sketch: sketch, layout: layout)
+        let chords = notation.chords
+        let beamGroups = notation.beamGroups
+        let tuplets = notation.tuplets
+        let selectedNotes = track.notes.filter { selectedNoteIDs.contains($0.id) }
         Canvas { [chords] context, size in
             let bottom = layout.bottomLineY(rowHeight: size.height)
             if isSelected {
@@ -44,11 +77,55 @@ struct StaffRowView: View {
             for group in tuplets {
                 notes.drawTuplet(group.map { chords[$0] }, in: context)
             }
-            if isSelected {
+            if !selectedNotes.isEmpty {
+                let selection = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.accent)
+                for chord in chords {
+                    let here = selectedNotes.filter { $0.start == chord.start }
+                    guard !here.isEmpty else { continue }
+                    selection.drawSelected(chord, pitches: Set(here.compactMap(\.pitch)), in: context)
+                }
+            }
+            if !dragPreview.isEmpty {
+                drawDragPreview(bottomLineY: bottom, in: context)
+            } else if isSelected, selectedNotes.isEmpty {
                 drawPreviewNote(bottomLineY: bottom, in: context)
             }
         }
         .frame(width: layout.contentWidth, height: rowHeight)
+        .overlay(alignment: .topLeading) {
+            selectionHandles(chords: chords, selectedNotes: selectedNotes)
+        }
+    }
+
+    /// 選んだ音符の上に置くドラッグ用の領域。ここから始めたドラッグだけを移動にし、それ以外は譜面のスクロールに任せる（iPad）。
+    private func selectionHandles(chords: [NotatedChord], selectedNotes: [Note]) -> some View {
+        let drawing = NoteDrawing(layout: layout, bottomLineY: layout.bottomLineY(rowHeight: rowHeight), color: Palette.accent)
+        let targets = drawing.hitTargets(chords).filter { target in
+            selectedNotes.contains { $0.start == target.start && $0.pitch == target.pitch }
+        }
+        return ZStack(alignment: .topLeading) {
+            ForEach(Array(targets.enumerated()), id: \.offset) { _, target in
+                Color.clear
+                    .contentShape(Rectangle())
+                    .frame(width: target.size.width, height: target.size.height)
+                    .position(target.center)
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .onChanged { onDragSelection($0.translation) }
+                            .onEnded { _ in onEndDragSelection() }
+                    )
+            }
+        }
+        .frame(width: layout.contentWidth, height: rowHeight, alignment: .topLeading)
+    }
+
+    /// ドラッグ中の移動先（半透明の青）。
+    private func drawDragPreview(bottomLineY: CGFloat, in context: GraphicsContext) {
+        let preview = Notation.chords(for: dragPreview, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
+        let drawing = NoteDrawing(layout: layout, bottomLineY: bottomLineY, color: Palette.accent.opacity(0.5))
+        for chord in preview {
+            drawing.draw(chord, in: context)
+        }
     }
 
     /// 入力中の小節（編集位置の小節）を薄い青で塗る。

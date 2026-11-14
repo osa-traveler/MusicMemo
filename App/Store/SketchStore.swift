@@ -46,6 +46,18 @@ final class SketchStore {
     /// 直前に確定した入力（⇧クリックで音を重ねる先）。
     private var lastEntry: Range<Tick>?
 
+    // 音符の選択（選択中のトラックの音符。画面だけの状態で、保存しない）
+    /// 選んでいる音符。タイでつながった音は一続きで選ぶ。
+    private(set) var selectedNoteIDs: Set<Note.ID> = []
+    /// 選んだ音符のドラッグ中の状態（離すまで曲は変えず、移動先を半透明で出す）。
+    struct NoteDrag {
+        var ticks: Tick
+        var pitch: MIDINote?
+        /// 移動先に置かれる音符（動いていなければ空）。
+        var preview: [Note]
+    }
+    private(set) var noteDrag: NoteDrag?
+
     // 入力パレット
     var inputMethod: InputMethod = .keyboard
     /// トラックごとの鍵盤の表示範囲（左端の C の MIDI ノート番号）。
@@ -174,6 +186,7 @@ final class SketchStore {
     }
 
     func selectTrack(_ id: Track.ID) {
+        if editor.selectedTrackID != id { clearNoteSelection() }
         editor.selectedTrackID = id
     }
 
@@ -225,6 +238,7 @@ final class SketchStore {
 
     /// 鍵を押した。押している鍵が無ければ新しい音として入力し、他の鍵を押している間や addToChord のときは和音に重ねる。
     func keyDown(_ pitch: MIDINote, addToChord: Bool = false) {
+        clearNoteSelection()
         editor.previewPitch = pitch
         heldKeys.insert(pitch)
         if let id = editor.selectedTrackID { sound.noteOn(pitch, track: id) }
@@ -265,6 +279,7 @@ final class SketchStore {
     /// 休符を選択中の音価で入力して進める。
     func enterRest() {
         guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+        clearNoteSelection()
         recordUndo()
         let range = NoteEditing.enter(
             pitches: [],
@@ -290,6 +305,112 @@ final class SketchStore {
         revealEditPosition()
     }
 
+    /// Delete キー・「戻って消す」ボタン：音符を選んでいればそれを消し、選んでいなければ戻って消す。
+    func deleteKey() {
+        hasNoteSelection ? deleteSelection() : backspace()
+    }
+
+    // MARK: 音符の選択・移動・削除
+
+    var selectedNotes: [Note] {
+        guard !selectedNoteIDs.isEmpty else { return [] }
+        return selectedTrack?.notes.filter { selectedNoteIDs.contains($0.id) } ?? []
+    }
+
+    var hasNoteSelection: Bool { !selectedNotes.isEmpty }
+
+    /// 音符（休符）を選ぶ。そのトラックも選ぶ。タイでつながった音は一続きで選ぶ。音符なら音を鳴らす。
+    func selectNote(_ id: Note.ID, track trackID: Track.ID) {
+        guard !isPlaying else { return }
+        selectTrack(trackID)
+        guard let track = selectedTrack else { return }
+        let chain = NoteEditing.tiedChain(containing: id, in: track.notes)
+        selectedNoteIDs = Set(chain.map(\.id))
+        noteDrag = nil
+        if let pitch = chain.first?.pitch { audition(pitch) }
+    }
+
+    func clearNoteSelection() {
+        selectedNoteIDs = []
+        noteDrag = nil
+    }
+
+    /// 矢印キー：選んだ音符を ticks だけずらし、semitones 半音だけ上下する。
+    func nudgeSelection(ticks: Tick = 0, semitones: Int = 0) {
+        guard let first = selectedNotes.first else { return }
+        moveSelection(by: ticks, to: first.pitch.map { $0 + semitones })
+    }
+
+    /// 選んだ音符を消す（跡は空白のまま）。
+    func deleteSelection() {
+        guard !isPlaying, let trackIndex = selectedTrackIndex, hasNoteSelection else { return }
+        recordUndo()
+        NoteEditing.delete(ids: selectedNoteIDs, in: &sketch.tracks[trackIndex])
+        lastEntry = nil
+        clearNoteSelection()
+    }
+
+    /// ドラッグ中：横は16分単位、縦は五線の1段（調の音階の音）単位で移動先を決め、半透明で出す。
+    func dragSelection(translation: CGSize) {
+        let notes = selectedNotes
+        guard !isPlaying, let track = selectedTrack, let start = notes.map(\.start).min() else { return }
+        let layout = layout
+        let grid = RulerView.seekGrid
+        var ticks: Tick = 0
+        if abs(translation.width) >= CGFloat(grid) * layout.pointsPerTick / 2 {
+            ticks = layout.tick(atContentX: layout.x(tick: start) + translation.width, grid: grid) - start
+        }
+        let originalPitch = notes.first?.pitch
+        var pitch = originalPitch
+        if let originalPitch {
+            let steps = Int((-translation.height / (layout.staffSpace / 2)).rounded())
+            if steps != 0 {
+                let position = track.clef.staffPosition(of: SpelledPitch(originalPitch, in: sketch.key))
+                pitch = min(max(track.clef.pitch(atStaffPosition: position + steps, in: sketch.key), 0), 127)
+            }
+        }
+        if let pitch, pitch != (noteDrag?.pitch ?? originalPitch) { audition(pitch) }
+
+        var preview: [Note] = []
+        if ticks != 0 || pitch != originalPitch {
+            var copy = track
+            let ids = Set(NoteEditing.move(ids: selectedNoteIDs, by: ticks, to: pitch, in: &copy,
+                                           timeSignature: sketch.timeSignature, totalTicks: sketch.totalTicks))
+            preview = copy.notes.filter { ids.contains($0.id) }
+        }
+        noteDrag = NoteDrag(ticks: ticks, pitch: pitch, preview: preview)
+    }
+
+    /// ドラッグを離した：移動先へ動かす。
+    func endDragSelection() {
+        guard let drag = noteDrag else { return }
+        noteDrag = nil
+        moveSelection(by: drag.ticks, to: drag.pitch, playsSound: false)
+    }
+
+    private func moveSelection(by ticks: Tick, to pitch: MIDINote?, playsSound: Bool = true) {
+        guard !isPlaying, let trackIndex = selectedTrackIndex, let original = selectedNotes.first else { return }
+        var track = sketch.tracks[trackIndex]
+        let ids = NoteEditing.move(ids: selectedNoteIDs, by: ticks, to: pitch, in: &track,
+                                   timeSignature: sketch.timeSignature, totalTicks: sketch.totalTicks)
+        guard track != sketch.tracks[trackIndex] else { return }
+        recordUndo()
+        sketch.tracks[trackIndex] = track
+        selectedNoteIDs = Set(ids)
+        lastEntry = nil
+        if playsSound, let pitch, pitch != original.pitch { audition(min(max(pitch, 0), 127)) }
+    }
+
+    /// 選択中のトラックの音色で短く鳴らす（音符を選んだとき・上下に動かしたとき）。
+    private func audition(_ pitch: MIDINote) {
+        guard let id = editor.selectedTrackID else { return }
+        sound.noteOn(pitch, track: id)
+        Task {
+            try? await Task.sleep(for: .milliseconds(300))
+            sound.noteOff(pitch, track: id)
+        }
+    }
+
     func undo() {
         guard let snapshot = undoStack.popLast() else { return }
         redoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
@@ -303,6 +424,7 @@ final class SketchStore {
     }
 
     private func restore(_ snapshot: Snapshot) {
+        clearNoteSelection()
         sketch = snapshot.sketch
         pendingEntry = nil
         lastEntry = nil
@@ -343,6 +465,7 @@ final class SketchStore {
     /// 再生を始める。ループがオンなら再生範囲の始点から（編集位置が範囲内ならそこから）、オフなら編集位置から。
     func startPlayback() {
         guard !isPlaying else { return }
+        clearNoteSelection()  // 再生中は選択・移動・削除をしない
         let range = sketch.playRange
         let start = sketch.isLooping && !range.contains(editor.editPosition) ? range.lowerBound : editor.editPosition
         isPlaying = true

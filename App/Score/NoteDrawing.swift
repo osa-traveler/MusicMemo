@@ -50,6 +50,66 @@ struct NoteDrawing {
         }
     }
 
+    // MARK: 選択
+
+    /// 符頭（休符）の当たり判定の範囲。クリック位置に一番近いものを選ぶ。
+    struct HitTarget {
+        /// 音符なら音高、休符なら nil。
+        var pitch: MIDINote?
+        var start: Tick
+        var center: CGPoint
+        var size: CGSize
+
+        func distance(to point: CGPoint) -> CGFloat? {
+            let dx = abs(point.x - center.x), dy = abs(point.y - center.y)
+            guard dx <= size.width / 2, dy <= size.height / 2 else { return nil }
+            return hypot(dx, dy * 1.5)
+        }
+    }
+
+    /// 符頭の中心（描くときと同じ計算。ずらした符頭も含む）。
+    private func headCenter(_ chord: NotatedChord, _ head: NotatedHead) -> CGPoint {
+        let width = headWidth(chord)
+        let displacement = (chord.stemUp ? 1 : -1) * (width - stemThickness)
+        let left = layout.x(tick: chord.start) - width / 2 + (head.isDisplaced ? displacement : 0)
+        return CGPoint(x: left + width / 2, y: y(head.staffPosition))
+    }
+
+    /// 符頭と休符の当たり判定。符頭の周りに半間隔ずつ広げる（上下は隣の音と取り合うので近い方を選ぶ）。
+    func hitTargets(_ chords: [NotatedChord]) -> [HitTarget] {
+        chords.flatMap { chord -> [HitTarget] in
+            if chord.isRest {
+                return [HitTarget(pitch: nil, start: chord.start, center: CGPoint(x: layout.x(tick: chord.start), y: y(Notation.middleLine)),
+                                  size: CGSize(width: 2 * space, height: 3.5 * space))]
+            }
+            return chord.heads.map { head in
+                HitTarget(pitch: head.pitch, start: chord.start, center: headCenter(chord, head),
+                          size: CGSize(width: headWidth(chord) + space, height: 2 * space))
+            }
+        }
+    }
+
+    /// 選んだ符頭（休符）を、この描画の色で上から描き直す。
+    func drawSelected(_ chord: NotatedChord, pitches: Set<MIDINote>, in context: GraphicsContext) {
+        if chord.isRest {
+            drawRest(chord.value, centerX: layout.x(tick: chord.start), in: context)
+            return
+        }
+        let glyph: Glyph = switch chord.value.value {
+        case .whole: .noteheadWhole
+        case .half: .noteheadHalf
+        default: .noteheadBlack
+        }
+        for head in chord.heads where pitches.contains(head.pitch) {
+            let center = headCenter(chord, head)
+            // 選んだ印：符頭の周りに薄い円
+            let radius = 1.05 * space
+            context.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)),
+                         with: .color(color.opacity(0.16)))
+            SMuFL.draw(glyph, at: CGPoint(x: center.x - headWidth(chord) / 2, y: center.y), staffSpace: space, color: color, in: context)
+        }
+    }
+
     // MARK: 連桁・タイ・3連符
 
     private func headWidth(_ chord: NotatedChord) -> CGFloat {

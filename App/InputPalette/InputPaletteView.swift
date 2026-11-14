@@ -16,7 +16,7 @@ struct InputPaletteView: View {
                 store: store,
                 onKeyDown: { store.keyDown($0, addToChord: ModifierKeys.isShiftPressed) },
                 onKeyUp: store.keyUp,
-                onBackspace: store.backspace,
+                onBackspace: store.deleteKey,
                 pressedKeys: store.heldKeys
             )
             .frame(maxWidth: .infinity)

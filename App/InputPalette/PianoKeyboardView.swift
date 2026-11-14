@@ -25,12 +25,13 @@ struct PianoKeyboardBlock: View {
                     .foregroundStyle(Palette.chord)
                 }
                 Spacer(minLength: 0)
+                // 音符を選んでいるときは「選んだ音を消す」になる
                 headerButton(action: onBackspace) {
-                    Label("戻って消す", systemImage: "delete.left")
+                    Label(store.hasNoteSelection ? "選んだ音を消す" : "戻って消す", systemImage: "delete.left")
                         .font(.system(size: 12))
                         .padding(.horizontal, 10)
                 }
-                .accessibilityLabel("直前の音符を消して戻る")
+                .accessibilityLabel(store.hasNoteSelection ? "選んだ音符を消す" : "直前の音符を消して戻る")
                 headerButton(action: { store.shiftKeyboard(octaves: -1) }) {
                     Image(systemName: "chevron.left").frame(width: 44)
                 }

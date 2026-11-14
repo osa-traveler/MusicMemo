@@ -13,6 +13,8 @@ struct ScoreView: View {
     @State private var isHUDVisible = false
     @State private var hudToken = 0
     @State private var didInitialScroll = false
+    /// Mac のマウスドラッグ：始めた位置の音符（nil = まだ判定していない、.some(nil) = 音符の外から始めた）。
+    @State private var mouseDragNote: Note.ID??
 
     private struct VerticalMetrics: Equatable {
         var offset: CGFloat = 0
@@ -233,17 +235,57 @@ struct ScoreView: View {
         }
     }
 
+    /// 音符の当たり判定。左端の音部記号の下に隠れている音符は選ばない。再生中は選ばない。
+    private func hitNote(at location: CGPoint, track: Track, layout: ScoreLayout, rowHeight: CGFloat) -> Note.ID? {
+        guard !store.isPlaying, location.x > store.horizontalOffset + layout.stickyWidth else { return nil }
+        return StaffRowView.hitNote(at: location, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
+    }
+
     private func staffRows(layout: ScoreLayout, rowHeight: CGFloat) -> some View {
         ScrollView(.horizontal) {
             VStack(spacing: 0) {
                 ForEach(store.sketch.tracks) { track in
-                    StaffRowView(track: track, sketch: store.sketch, editor: store.editor, layout: layout, rowHeight: rowHeight)
-                        .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
-                        .onTapGesture { location in
-                            // 鍵盤入力中は、タップしたトラックを選び、編集位置もそこへ動かす
-                            store.selectTrack(track.id)
-                            store.setEditPosition(layout.tick(atContentX: location.x, grid: RulerView.seekGrid))
+                    let isSelectedTrack = store.editor.selectedTrackID == track.id
+                    StaffRowView(
+                        track: track, sketch: store.sketch, editor: store.editor, layout: layout, rowHeight: rowHeight,
+                        selectedNoteIDs: isSelectedTrack ? store.selectedNoteIDs : [],
+                        dragPreview: isSelectedTrack ? store.noteDrag?.preview ?? [] : [],
+                        onDragSelection: { store.dragSelection(translation: $0) },
+                        onEndDragSelection: { store.endDragSelection() }
+                    )
+                    .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
+                    .onTapGesture { location in
+                        // 音符（休符）の上なら選ぶ。それ以外は、タップしたトラックを選び、編集位置もそこへ動かす
+                        if let note = hitNote(at: location, track: track, layout: layout, rowHeight: rowHeight) {
+                            store.selectNote(note, track: track.id)
+                            return
                         }
+                        store.clearNoteSelection()
+                        store.selectTrack(track.id)
+                        store.setEditPosition(layout.tick(atContentX: location.x, grid: RulerView.seekGrid))
+                    }
+                    #if os(macOS)
+                    // Mac はマウスのドラッグで譜面がスクロールしないので、選んでいない音符もそのままつかんで動かせる
+                    .gesture(
+                        DragGesture(minimumDistance: 3)
+                            .onChanged { drag in
+                                if mouseDragNote == nil {
+                                    let note = hitNote(at: drag.startLocation, track: track, layout: layout, rowHeight: rowHeight)
+                                    mouseDragNote = .some(note)
+                                    if let note, !store.selectedNoteIDs.contains(note) || !isSelectedTrack {
+                                        store.selectNote(note, track: track.id)
+                                    }
+                                }
+                                if case .some(.some) = mouseDragNote {
+                                    store.dragSelection(translation: drag.translation)
+                                }
+                            }
+                            .onEnded { _ in
+                                if case .some(.some) = mouseDragNote { store.endDragSelection() }
+                                mouseDragNote = nil
+                            }
+                    )
+                    #endif
                 }
             }
         }
