@@ -17,9 +17,15 @@ struct NoteDrawing {
         layout.y(staffPosition: position, bottomLineY: bottomLineY)
     }
 
+    /// 音符の中心の x。同じ位置の別の声部とぶつかる音符は、相手の符頭（と符幹）をよけて右へずらす。
+    private func centerX(_ chord: NotatedChord) -> CGFloat {
+        let distance = (blackHeadWidth + headWidth(chord)) / 2 + 0.2 * space
+        return layout.x(tick: chord.start) + CGFloat(chord.shift) * distance
+    }
+
     /// 音符を1つ描く。stemEndY を渡すと符幹をそこまで伸ばし、旗は描かない（連桁でつなぐとき）。
     func draw(_ chord: NotatedChord, stemEndY: CGFloat? = nil, in context: GraphicsContext) {
-        let centerX = layout.x(tick: chord.start)
+        let centerX = centerX(chord)
         if chord.isRest {
             drawRest(chord.value, centerX: centerX, in: context)
             return
@@ -71,7 +77,7 @@ struct NoteDrawing {
     private func headCenter(_ chord: NotatedChord, _ head: NotatedHead) -> CGPoint {
         let width = headWidth(chord)
         let displacement = (chord.stemUp ? 1 : -1) * (width - stemThickness)
-        let left = layout.x(tick: chord.start) - width / 2 + (head.isDisplaced ? displacement : 0)
+        let left = centerX(chord) - width / 2 + (head.isDisplaced ? displacement : 0)
         return CGPoint(x: left + width / 2, y: y(head.staffPosition))
     }
 
@@ -79,7 +85,7 @@ struct NoteDrawing {
     func hitTargets(_ chords: [NotatedChord]) -> [HitTarget] {
         chords.flatMap { chord -> [HitTarget] in
             if chord.isRest {
-                return [HitTarget(pitch: nil, start: chord.start, center: CGPoint(x: layout.x(tick: chord.start), y: y(Notation.middleLine)),
+                return [HitTarget(pitch: nil, start: chord.start, center: CGPoint(x: centerX(chord), y: y(Notation.middleLine)),
                                   size: CGSize(width: 2 * space, height: 3.5 * space))]
             }
             return chord.heads.map { head in
@@ -92,7 +98,7 @@ struct NoteDrawing {
     /// 選んだ符頭（休符）を、この描画の色で上から描き直す。
     func drawSelected(_ chord: NotatedChord, pitches: Set<MIDINote>, in context: GraphicsContext) {
         if chord.isRest {
-            drawRest(chord.value, centerX: layout.x(tick: chord.start), in: context)
+            drawRest(chord.value, centerX: centerX(chord), in: context)
             return
         }
         let glyph: Glyph = switch chord.value.value {
@@ -118,7 +124,7 @@ struct NoteDrawing {
 
     /// 符幹の x。
     private func stemX(_ chord: NotatedChord) -> CGFloat {
-        let left = layout.x(tick: chord.start) - headWidth(chord) / 2
+        let left = centerX(chord) - headWidth(chord) / 2
         return chord.stemUp ? left + headWidth(chord) - stemThickness / 2 : left + stemThickness / 2
     }
 
@@ -168,16 +174,19 @@ struct NoteDrawing {
     /// タイの弧。次の音（end の位置で始まる音）の同じ音高へつなぐ。次が無ければ短く右へ伸ばす。
     func drawTies(_ chord: NotatedChord, next: NotatedChord?, in context: GraphicsContext) {
         let width = headWidth(chord)
-        let startX = layout.x(tick: chord.start) + width * 0.45
+        let defaultStartX = centerX(chord) + width * 0.45
         for (index, head) in chord.heads.enumerated() where head.tiesToNext {
+            // 符幹と反対側に弧を描く。和音の一番上の音は上向き。
+            // 2つの声部が重なる所では、上の声部は上側、下の声部は下側（もう1つの声部から離す）
+            let above = chord.stemFixed ? chord.stemUp : chord.heads.count > 1 ? index == chord.heads.count - 1 : !chord.stemUp
+            // 上向きの符幹の音から上側へ伸ばすときは、符幹をよけて右から始める
+            let startX = above && chord.stemUp && chord.value.hasStem ? centerX(chord) + width * 0.7 : defaultStartX
             let endX: CGFloat
             if let next, next.heads.contains(where: { $0.pitch == head.pitch }) {
-                endX = layout.x(tick: next.start) - headWidth(next) * 0.45
+                endX = centerX(next) - headWidth(next) * 0.45
             } else {
                 endX = startX + 2 * space
             }
-            // 符幹と反対側に弧を描く。和音の一番上の音は上向き。
-            let above = chord.heads.count > 1 ? index == chord.heads.count - 1 : !chord.stemUp
             let direction: CGFloat = above ? -1 : 1
             let baseY = y(head.staffPosition) + direction * 0.6 * space
             let height = min(max((endX - startX) * 0.12, 0.6 * space), 1.6 * space)
@@ -196,7 +205,7 @@ struct NoteDrawing {
         guard let first = chords.first, let last = chords.last else { return }
         let stemUp = chords.filter { !$0.isRest }.first?.stemUp ?? true
         let ends = chords.filter { !$0.isRest && $0.value.hasStem }.map(defaultStemEnd)
-        let x = (layout.x(tick: first.start) + layout.x(tick: last.start)) / 2
+        let x = (centerX(first) + centerX(last)) / 2
         let edge = stemUp ? (ends.min() ?? y(10)) - 0.5 * space : (ends.max() ?? y(-2)) + 0.5 * space
         context.draw(
             Text("3").font(.system(size: layout.textSize(11, minimumScale: 0.9), weight: .semibold).italic()).foregroundStyle(color),

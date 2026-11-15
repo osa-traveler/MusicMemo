@@ -11,6 +11,8 @@ private final class ScoreReader: NSObject, XMLParserDelegate {
         var tieStarts = 0
         var tieStops = 0
         var pitches: [String] = []
+        var voices: Set<String> = []
+        var backups = 0
     }
 
     var parts: [String: [Measure]] = [:]
@@ -55,6 +57,11 @@ private final class ScoreReader: NSObject, XMLParserDelegate {
         switch (name, parent) {
         case ("part-name", _): partNames.append(text)
         case ("duration", "note"): noteDuration = Int(text) ?? 0
+        case ("duration", "backup"):
+            // 小節の頭へ戻る（2つ目の声部）
+            parts[part]![parts[part]!.count - 1].duration -= Int(text) ?? 0
+            parts[part]![parts[part]!.count - 1].backups += 1
+        case ("voice", "note"): parts[part]![parts[part]!.count - 1].voices.insert(text)
         case ("step", "pitch"), ("alter", "pitch"), ("octave", "pitch"): pitch += text
         case ("root-step", _), ("root-alter", _), ("bass-step", _): harmony += (name == "bass-step" ? "/" : "") + text
         case ("kind", _): harmony += "|" + text
@@ -146,5 +153,25 @@ struct MusicXMLExporterTests {
         #expect(MusicXMLExporter.harmonyKind(.minor7Flat5).0 == "half-diminished")
         #expect(MusicXMLExporter.spell(10, preferFlats: true) == ("B", -1))
         #expect(MusicXMLExporter.spell(6, preferFlats: false) == ("F", 1))
+    }
+
+    @Test func twoVoicesUseBackup() {
+        var sketch = self.sketch
+        // 12小節目：C E の全音符と、3拍目からの G（2分＋次の小節へタイ）
+        let bar12 = 1920 * 11
+        sketch.tracks[0].notes.removeAll { $0.start >= bar12 && $0.start < bar12 + 1920 * 2 }
+        sketch.tracks[0].notes += [Note(start: bar12, duration: 1920, pitch: 60), Note(start: bar12, duration: 1920, pitch: 64),
+                                   Note(start: bar12 + 960, duration: 960, pitch: 67, tiesToNext: true),
+                                   Note(start: bar12 + 1920, duration: 960, pitch: 67)]
+        let reader = ScoreReader(MusicXMLExporter.data(for: sketch))
+        let melody = reader.parts["P1"]!
+        #expect(melody[11].voices == ["1", "2"])
+        #expect(melody[11].backups == 1)
+        #expect(melody[11].duration == 1920)
+        #expect(melody[11].pitches == ["C4", "E4", "G4"])
+        #expect(melody[12].pitches == ["G4"])
+        #expect(melody[11].tieStarts == 1 && melody[12].tieStops == 1)
+        // 1つの声部だけの小節には backup を書かない
+        #expect(melody[13].backups == 0)
     }
 }

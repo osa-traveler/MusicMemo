@@ -128,34 +128,41 @@ struct NoteEditingTests {
         #expect(ids == [track.notes[0].id])
     }
 
-    @Test func moveIntoLongerNoteSplitsItAndMakesChord() {
+    @Test func moveIntoLongerNoteLayersWithoutCutting() {
         var track = emptyTrack()
         track.notes = [Note(start: 0, duration: 480, pitch: 60), Note(start: 480, duration: 960, pitch: 64)]
-        // 64 の途中（960）へ 60 を動かす → 64 は 960 で分けてタイでつなぎ、後半が 60 と和音になる
+        // 64 の途中（960）へ 60 を動かす → 64 はそのまま、60 が重なる（2つの声部）
         NoteEditing.move(ids: [track.notes[0].id], by: 960, to: 60, in: &track, timeSignature: time, totalTicks: total)
-        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[480, 480, 64], [960, 480, 60], [960, 480, 64]])
-        #expect(track.notes.map(\.tiesToNext) == [true, false, false])
+        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[480, 960, 64], [960, 480, 60]])
+        #expect(track.notes.allSatisfy { !$0.tiesToNext })
     }
 
     @Test func movingChordToneOfWholeNotesKeepsOthersSounding() {
         var track = emptyTrack()
-        // 小節頭の C E G（全音符）から G だけを3拍目へ → C E は全音符のまま（2分＋2分のタイ）、3拍目から G が重なる
+        // 小節頭の C E G（全音符）から G だけを3拍目へ → C E は全音符のまま、G は2分＋（次の小節）2分のタイ
         track.notes = [60, 64, 67].map { Note(start: 0, duration: 1920, pitch: $0) }
         NoteEditing.move(ids: [track.notes[2].id], by: 960, to: 67, in: &track, timeSignature: time, totalTicks: total)
-        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] }
-                == [[0, 960, 60], [0, 960, 64], [960, 960, 60], [960, 960, 64], [960, 960, 67], [1920, 960, 67]])
-        #expect(track.notes.map(\.tiesToNext) == [true, true, false, false, true, false])
+        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[0, 1920, 60], [0, 1920, 64], [960, 960, 67], [1920, 960, 67]])
+        #expect(track.notes.map(\.tiesToNext) == [false, false, true, false])
     }
 
-    @Test func movingShortNoteIntoWholeNoteSplitsAtBothEdges() {
+    @Test func movingShortNoteIntoWholeNoteKeepsWholeNote() {
         var track = emptyTrack()
         track.notes = [Note(start: 0, duration: 1920, pitch: 60), Note(start: 1920, duration: 240, pitch: 62)]
-        // 2小節目の8分 D を 1小節目の2拍目へ → C は 2拍目の頭と裏で分かれ、残り（1200）は2分＋8分
+        // 2小節目の8分 D を 1小節目の2拍目へ → C は全音符のまま
         NoteEditing.move(ids: [track.notes[1].id], by: -1440, to: 62, in: &track, timeSignature: time, totalTicks: total)
-        let c = track.notes.filter { $0.pitch == 60 }
-        #expect(c.map { [$0.start, $0.duration] } == [[0, 480], [480, 240], [720, 960], [1680, 240]])
-        #expect(c.map(\.tiesToNext) == [true, true, true, false])
-        #expect(track.notes.filter { $0.pitch == 62 }.map { [$0.start, $0.duration] } == [[480, 240]])
+        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[0, 1920, 60], [480, 240, 62]])
+    }
+
+    @Test func fallsBackToChordWhenThreeLayersOverlap() {
+        var track = emptyTrack()
+        // C 全音符と E 2分（3拍目から）がすでに2つの声部。そこへ G を 3.3 に動かすと3つ目になる → 境目で分けて和音に
+        track.notes = [Note(start: 0, duration: 1920, pitch: 60), Note(start: 960, duration: 960, pitch: 64),
+                       Note(start: 1920, duration: 240, pitch: 67)]
+        NoteEditing.move(ids: [track.notes[2].id], by: -720, to: 67, in: &track, timeSignature: time, totalTicks: total)
+        #expect(!Notation.assignVoices(track.notes).overflows)
+        #expect(track.notes.filter { $0.pitch == 67 }.map { [$0.start, $0.duration] } == [[1200, 240]])
+        #expect(track.notes.filter { $0.pitch == 60 }.map(\.start) == [0, 960, 1200, 1440])
     }
 
     @Test func moveOverwritesSamePitchAndRests() {
@@ -258,9 +265,8 @@ struct NoteEditingTests {
         ]
         NoteEditing.move(ids: Set(track.notes.prefix(2).map(\.id)), by: 1200, pitch: { $0 }, in: &track,
                          timeSignature: time, totalTicks: total)
-        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] }
-                == [[960, 240, 64], [1200, 480, 60], [1200, 480, 64], [1680, 240, 62], [1680, 240, 64], [1920, 240, 62]])
-        #expect(track.notes.map(\.tiesToNext) == [true, false, true, true, false, false])
+        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[960, 960, 64], [1200, 480, 60], [1680, 240, 62], [1920, 240, 62]])
+        #expect(track.notes.map(\.tiesToNext) == [false, false, true, false])
     }
 
     @Test func groupStopsAtSongEdgeAsAWhole() {
@@ -289,8 +295,7 @@ struct NoteEditingTests {
         for _ in 0..<8 {
             ids = Set(NoteEditing.move(ids: ids, by: 120, pitch: { $0 }, in: &track, timeSignature: time, totalTicks: total))
         }
-        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] }
-                == [[0, 960, 60], [0, 960, 64], [960, 960, 60], [960, 960, 64], [960, 960, 67], [1920, 960, 67]])
+        #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[0, 1920, 60], [0, 1920, 64], [960, 960, 67], [1920, 960, 67]])
         // 元の位置へ戻すと、C E G の全音符3つに戻る
         NoteEditing.move(ids: ids, by: -960, pitch: { $0 }, in: &track, timeSignature: time, totalTicks: total)
         #expect(track.notes.map { [$0.start, $0.duration, $0.pitch!] } == [[0, 1920, 60], [0, 1920, 64], [0, 1920, 67]])

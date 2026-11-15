@@ -142,7 +142,15 @@ enum DebugInputDemo {
         for _ in 0..<8 { store.nudgeSelection(ticks: RulerView.seekGrid) }
         let notes = store.selectedTrack?.notes.filter { $0.start >= bar10 && $0.start < bar10 + 1920 * 2 } ?? []
         log.notice("chord tone move \(notes.map { "\($0.start - bar10):\(Pitch.noteName($0.pitch ?? 0))/\($0.duration)\($0.tiesToNext ? "~" : "")" }.joined(separator: " "), privacy: .public)")
-        store.scroll(toLeadingBar: 9)
+        // 12小節目：全音符 E と同じ位置の4分 F（2度でぶつかる → 下の声部を右へ）、続けて8分 A G（上の声部で連桁）
+        let bar12 = store.sketch.timeSignature.startTick(ofBar: 12)
+        if let index = store.sketch.tracks.firstIndex(where: { $0.id == trackID }) {
+            store.sketch.tracks[index].notes += [
+                Note(start: bar12, duration: 1920, pitch: 64), Note(start: bar12, duration: 480, pitch: 65),
+                Note(start: bar12 + 480, duration: 240, pitch: 69), Note(start: bar12 + 720, duration: 240, pitch: 67),
+            ]
+        }
+        store.scroll(toLeadingBar: 10)
     }
 }
 #endif

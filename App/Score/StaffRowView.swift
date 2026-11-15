@@ -20,17 +20,15 @@ struct StaffRowView: View {
 
     private var isSelected: Bool { editor.selectedTrackID == track.id }
 
-    /// 描く音符（記譜用に変換したもの）と連桁・3連符のまとまり。
+    /// 描く音符（記譜用に変換したもの）。長さの違う音が重なるところは2つの声部に分ける。
     struct StaffNotation {
-        var chords: [NotatedChord]
-        var beamGroups: [[Int]]
-        var tuplets: [[Int]]
+        var voices: [Notation.NotatedVoice]
+        /// 全部の声部の音符（当たり判定・選択の表示用）。
+        var chords: [NotatedChord] { voices.flatMap(\.chords) }
     }
 
     static func notation(of track: Track, sketch: Sketch, layout: ScoreLayout) -> StaffNotation {
-        var chords = Notation.chords(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature)
-        let beamGroups = Notation.beamGroups(&chords, timeSignature: layout.timeSignature)
-        return StaffNotation(chords: chords, beamGroups: beamGroups, tuplets: Notation.tupletGroups(chords))
+        StaffNotation(voices: Notation.voices(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature))
     }
 
     /// point（行の座標）にある音符・休符。一番近い符頭を選ぶ。
@@ -54,11 +52,10 @@ struct StaffRowView: View {
 
     var body: some View {
         let notation = Self.notation(of: track, sketch: sketch, layout: layout)
+        let voices = notation.voices
         let chords = notation.chords
-        let beamGroups = notation.beamGroups
-        let tuplets = notation.tuplets
         let selectedNotes = track.notes.filter { selectedNoteIDs.contains($0.id) }
-        Canvas { [chords] context, size in
+        Canvas { [voices, chords] context, size in
             let bottom = layout.bottomLineY(rowHeight: size.height)
             if isSelected {
                 drawInputBar(rowHeight: size.height, in: context)
@@ -73,19 +70,8 @@ struct StaffRowView: View {
                 drawChordSymbols(bottomLineY: bottom, in: context)
             }
             let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
-            let beamed = Set(beamGroups.joined())
-            for (index, chord) in chords.enumerated() where !beamed.contains(index) {
-                notes.draw(chord, in: context)
-            }
-            for group in beamGroups {
-                notes.drawBeamGroup(group.map { chords[$0] }, in: context)
-            }
-            let chordsByStart = Dictionary(chords.map { ($0.start, $0) }, uniquingKeysWith: { first, _ in first })
-            for chord in chords where chord.heads.contains(where: \.tiesToNext) {
-                notes.drawTies(chord, next: chordsByStart[chord.end], in: context)
-            }
-            for group in tuplets {
-                notes.drawTuplet(group.map { chords[$0] }, in: context)
+            for voice in voices {
+                drawVoice(voice, with: notes, in: context)
             }
             if !selectedNotes.isEmpty {
                 let selection = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.accent)
@@ -109,6 +95,26 @@ struct StaffRowView: View {
         .frame(width: layout.contentWidth, height: rowHeight)
         .overlay(alignment: .topLeading) {
             selectionHandles(chords: chords, selectedNotes: selectedNotes)
+        }
+    }
+
+    /// 1つの声部の音符・連桁・タイ・3連符。
+    private func drawVoice(_ voice: Notation.NotatedVoice, with notes: NoteDrawing, in context: GraphicsContext) {
+        let chords = voice.chords
+        let beamed = Set(voice.beamGroups.joined())
+        for (index, chord) in chords.enumerated() where !beamed.contains(index) {
+            notes.draw(chord, in: context)
+        }
+        for group in voice.beamGroups {
+            notes.drawBeamGroup(group.map { chords[$0] }, in: context)
+        }
+        // タイの行き先は同じ声部の中で探す
+        let chordsByStart = Dictionary(chords.map { ($0.start, $0) }, uniquingKeysWith: { first, _ in first })
+        for chord in chords where chord.heads.contains(where: \.tiesToNext) {
+            notes.drawTies(chord, next: chordsByStart[chord.end], in: context)
+        }
+        for group in voice.tuplets {
+            notes.drawTuplet(group.map { chords[$0] }, in: context)
         }
     }
 

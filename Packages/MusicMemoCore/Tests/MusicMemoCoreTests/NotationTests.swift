@@ -130,4 +130,63 @@ struct BeamAndTupletTests {
         let notes = (0..<6).map { Note(start: $0 * triplet, duration: triplet, pitch: 64) }
         #expect(Notation.tupletGroups(chords(notes)) == [[0, 1, 2], [3, 4, 5]])
     }
+
+    // MARK: 声部
+
+    @Test func melodyIsOneVoice() {
+        let notes = [Note(start: 0, duration: 480, pitch: 60), Note(start: 480, duration: 480, pitch: 62),
+                     Note(start: 960, duration: 960, pitch: 64), Note(start: 960, duration: 960, pitch: 67)]
+        let assignment = Notation.assignVoices(notes)
+        #expect(assignment.voices.count == 1)
+        #expect(!assignment.overflows)
+    }
+
+    @Test func overlappingNoteGoesToSecondVoiceAndTieStaysThere() {
+        // C E 全音符、G は3拍目から2分＋（次の小節）2分のタイ。次の小節の G も2つ目の声部のまま
+        let notes = [Note(start: 0, duration: 1920, pitch: 60), Note(start: 0, duration: 1920, pitch: 64),
+                     Note(start: 960, duration: 960, pitch: 67, tiesToNext: true), Note(start: 1920, duration: 960, pitch: 67)]
+        let assignment = Notation.assignVoices(notes)
+        #expect(assignment.voices.map { $0.map(\.pitch!) } == [[60, 64], [67, 67]])
+    }
+
+    @Test func sameStartDifferentLengthSplitsVoices() {
+        let notes = [Note(start: 0, duration: 480, pitch: 67), Note(start: 0, duration: 1920, pitch: 60)]
+        let assignment = Notation.assignVoices(notes)
+        #expect(assignment.voices.map { $0.map(\.pitch!) } == [[60], [67]])  // 長い方が先の声部
+    }
+
+    @Test func threeLayersOverflow() {
+        let notes = [Note(start: 0, duration: 1920, pitch: 60), Note(start: 480, duration: 1440, pitch: 64),
+                     Note(start: 960, duration: 480, pitch: 67)]
+        #expect(Notation.assignVoices(notes).overflows)
+    }
+
+    @Test func voicesFixStemsByHeight() {
+        // C E 全音符（下の声部）と、3拍目からの G 4分（上の声部）→ G は上向き、C E は下向き
+        let notes = [Note(start: 0, duration: 1920, pitch: 60), Note(start: 0, duration: 1920, pitch: 64),
+                     Note(start: 960, duration: 480, pitch: 67)]
+        let voices = Notation.voices(for: notes, clef: .treble, key: .cMajor, timeSignature: .common)
+        #expect(voices.count == 2)
+        #expect(voices[0].chords.map(\.stemUp) == [false])
+        #expect(voices[1].chords.map(\.stemUp) == [true])
+        #expect(voices[0].chords[0].value == NoteDuration(.whole))
+    }
+
+    @Test func accidentalsCountAcrossVoices() {
+        // 声部2の F♯（2拍目）のあと、声部1の F（3拍目）にはナチュラル
+        let notes = [Note(start: 0, duration: 1920, pitch: 60), Note(start: 480, duration: 480, pitch: 66),
+                     Note(start: 960, duration: 480, pitch: 65)]
+        let voices = Notation.voices(for: notes, clef: .treble, key: .cMajor, timeSignature: .common)
+        let heads = voices.flatMap(\.chords).flatMap { chord in chord.heads.map { (chord.start, $0) } }
+        #expect(heads.first { $0.0 == 480 }?.1.accidental == 1)
+        #expect(heads.first { $0.0 == 960 }?.1.accidental == 0)
+    }
+
+    @Test func collidingSecondShiftsDownStemVoice() {
+        // 同じ位置で E（全音符、下の声部）と F（4分、上の声部）→ 2度でぶつかる → 下向きの声部（E）を右へ
+        let notes = [Note(start: 0, duration: 1920, pitch: 64), Note(start: 0, duration: 480, pitch: 65)]
+        let voices = Notation.voices(for: notes, clef: .treble, key: .cMajor, timeSignature: .common)
+        #expect(voices[0].chords[0].shift == 1)
+        #expect(voices[1].chords[0].shift == 0)
+    }
 }

@@ -121,7 +121,9 @@ public enum NoteEditing {
 
     /// 選んだ音（タイでつながった一続きや休符をいくつでも）をまとめて ticks だけずらし、音高を pitch で変える（休符は横にだけ動く）。
     /// - 選んだ音どうしの並びは保つ（選んだ音どうしは消し合わない）。曲の端では、まとまり全体で止まる。
-    /// - 移動先は上書き方式：同じ位置・同じ長さの音とは和音になり、それ以外の重なる音は消すか手前で切り詰める。
+    /// - 移動先で別の高さの音と重なったら、どちらも切らずに重ねる（譜面では2つの声部に分けて描く）。同じ位置・同じ長さなら和音。
+    ///   重ねると声部が2つに収まらないときだけ、重なる音どうしを境目で分けてタイでつなぎ、和音にする。
+    /// - 同じ高さの音と休符は上書き（消すか手前で切り詰める）。
     /// - 小節線をまたぐ長さは分けてタイでつなぐ。前後の音とのタイは外れる。
     /// - Returns: 動かした後の音の ID（開始順）。動かなければ元の ID。
     @discardableResult
@@ -152,6 +154,20 @@ public enum NoteEditing {
         let unchanged = delta == 0 && zip(chains, moves).allSatisfy { $0.0[0].pitch == $0.1.pitch }
         guard !unchanged else { return moving.map(\.id) }
 
+        var layered = track
+        let placed = placeLayered(ids: ids, moving: moving, moves: moves, in: &layered, timeSignature: timeSignature)
+        if !Notation.assignVoices(layered.notes).overflows {
+            track = layered
+            return placed
+        }
+        return placeJoined(ids: ids, moving: moving, moves: moves, in: &track, timeSignature: timeSignature)
+    }
+
+    /// 移動の下ごしらえ：選んだ音を消し、移動先で同じ高さの音・休符を上書きし、手前の音からのタイを外す。
+    /// - Returns: 元の位置で重なっていた音と、移動先（タイの一続きは1つの長い音として。同じ位置・同じ高さには重ねない）。
+    private static func prepareMove(
+        ids: Set<Note.ID>, moving: [Note], moves: [(range: Range<Tick>, pitch: MIDINote?)], in track: inout Track
+    ) -> (vacated: Set<Note.ID>, targets: [Note]) {
         // 元の位置で重なっていた音（和音のために分けてタイでつないでいた音）。跡に残るので、あとで切れ端をまとめ直す
         let vacated = Set(track.notes.filter { note in
             !ids.contains(note.id) && !note.isRest && moving.contains { $0.start < note.end && note.start < $0.end }
@@ -184,6 +200,47 @@ public enum NoteEditing {
             }
         }
 
+        return (vacated, targets)
+    }
+
+    /// 重ねて置く：移動先で別の高さの音と重なっても、どちらも切らない（譜面では2つの声部に分けて描く）。
+    /// 元の位置や移動先で重なる音のタイの切れ端は、1つにまとめてから小節線で分け直す。
+    private static func placeLayered(
+        ids: Set<Note.ID>, moving: [Note], moves: [(range: Range<Tick>, pitch: MIDINote?)],
+        in track: inout Track, timeSignature: TimeSignature
+    ) -> [Note.ID] {
+        let (vacated, targets) = prepareMove(ids: ids, moving: moving, moves: moves, in: &track)
+        let targetNotes = targets.filter { !$0.isRest }
+        var merged: [Note] = []
+        var mergedIDs = Set<Note.ID>()
+        for note in track.notes where !note.isRest && !mergedIDs.contains(note.id)
+            && (vacated.contains(note.id) || targetNotes.contains { $0.start < note.end && note.start < $0.end }) {
+            let chain = tiedChain(containing: note.id, in: track.notes)
+            mergedIDs.formUnion(chain.map(\.id))
+            merged.append(Note(id: chain[0].id, start: chain[0].start, duration: chain[chain.count - 1].end - chain[0].start,
+                               pitch: chain[0].pitch))
+        }
+        track.notes.removeAll { mergedIDs.contains($0.id) }
+        track.notes += merged.flatMap { cut($0, at: [], timeSignature: timeSignature) }
+        let placed = targets.flatMap { target in
+            target.isRest
+                ? split(target.start..<target.end, timeSignature: timeSignature).map { Note.rest(start: $0.lowerBound, duration: $0.count) }
+                : cut(target, at: [], timeSignature: timeSignature)
+        }
+        track.notes += placed
+        removeDanglingTies(&track.notes)
+        sort(&track.notes)
+        return placed.map(\.id)
+    }
+
+    /// 和音にして置く：重なる音どうしを互いの境目で分けてタイでつなぎ、同じ声部の和音にする。
+    /// 重ねて置くと声部が2つに収まらないとき（3つ以上の長さが重なるとき）に使う。
+    private static func placeJoined(
+        ids: Set<Note.ID>, moving: [Note], moves: [(range: Range<Tick>, pitch: MIDINote?)],
+        in track: inout Track, timeSignature: TimeSignature
+    ) -> [Note.ID] {
+        let (vacated, targets) = prepareMove(ids: ids, moving: moving, moves: moves, in: &track)
+        let targetNotes = targets.filter { !$0.isRest }
         // 移動先と重なる音（2）：別の高さの音とは和音にする。開始位置や長さが違えば、互いの境目で分けてタイでつなぐ
         // （例：全音符の途中へ動かすと、全音符は2つに分かれてタイでつながる）。
         // 関わる音（重なる音と、それに重なる音、元の位置で重なっていた音）は、タイの一続きを1つにまとめてから分け直すので、

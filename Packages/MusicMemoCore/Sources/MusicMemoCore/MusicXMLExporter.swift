@@ -56,12 +56,8 @@ public enum MusicXMLExporter {
 
     private static func writePart(_ track: Track, id: String, sketch: Sketch, isFirst: Bool, carriesChords: Bool, into xml: inout XMLWriter) {
         let time = sketch.timeSignature
-        var chords = Notation.chords(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: time)
-        _ = Notation.beamGroups(&chords, timeSignature: time)
-        let tuplets = Notation.tupletGroups(chords)
-        let tupletStarts = Set(tuplets.compactMap(\.first).map { chords[$0].start })
-        let tupletEnds = Set(tuplets.compactMap(\.last).map { chords[$0].start })
-        let tiedInto = tiedTargets(chords)
+        // 長さの違う音が重なるところは2つの声部に分ける（譜面の表示と同じ分け方）
+        let voices = Notation.voices(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: time)
         let sectionStarts = Dictionary(sketch.sections.map { ($0.startBar, $0.name) }, uniquingKeysWith: { first, _ in first })
 
         xml.open("part", attributes: [("id", id)])
@@ -76,56 +72,18 @@ public enum MusicXMLExporter {
                 if let name = sectionStarts[bar] { writeRehearsal(name, into: &xml) }
             }
 
-            // 小節内の音符（はみ出す分は切る）と、隙間を埋める休符を時間順に並べる
-            let inBar = chords.filter { $0.start >= barStart && $0.start < barEnd }
-            let harmonies = carriesChords ? sketch.chords(inBar: bar) : []
-            var position = barStart
-            var pendingHarmonies = harmonies
-
-            func emitHarmonies(from start: Tick, length: Tick) {
-                let due = pendingHarmonies.filter { $0.start < start + length }
-                for event in due {
-                    writeHarmony(event.chord, offset: max(event.start - start, 0), into: &xml)
+            for voice in voices {
+                let hasNotes = voice.chords.contains { $0.start >= barStart && $0.start < barEnd }
+                // 2つ目の声部は、その小節に音符があるときだけ、小節の頭へ戻って書く
+                guard voice.index == 0 || hasNotes else { continue }
+                if voice.index > 0 {
+                    xml.open("backup")
+                    xml.element("duration", String(time.ticksPerBar))
+                    xml.close("backup")
                 }
-                pendingHarmonies.removeAll { $0.start < start + length }
+                writeVoice(voice, bar: bar, sketch: sketch, harmonies: carriesChords && voice.index == 0 ? sketch.chords(inBar: bar) : [],
+                           into: &xml)
             }
-
-            func fillRest(to end: Tick) {
-                guard end > position else { return }
-                if position == barStart && end == barEnd && inBar.isEmpty {
-                    emitHarmonies(from: position, length: end - position)
-                    writeMeasureRest(time.ticksPerBar, into: &xml)
-                    position = end
-                    return
-                }
-                for segment in NoteEditing.split(position..<end, timeSignature: time) {
-                    emitHarmonies(from: segment.lowerBound, length: segment.count)
-                    writeNote(nil, duration: segment.count, value: NoteDuration(ticks: segment.count), isChordMember: false,
-                              tieStart: false, tieStop: false, tuplet: nil, stemUp: nil, into: &xml)
-                }
-                position = end
-            }
-
-            for chord in inBar {
-                fillRest(to: chord.start)
-                guard chord.start >= position else { continue }  // 前の音と重なる音は書かない（声部は1つ）
-                let length = min(chord.end, barEnd) - chord.start
-                emitHarmonies(from: chord.start, length: length)
-                let tuplet: String? = tupletStarts.contains(chord.start) ? "start" : tupletEnds.contains(chord.start) ? "stop" : nil
-                if chord.isRest {
-                    writeNote(nil, duration: length, value: chord.value, isChordMember: false,
-                              tieStart: false, tieStop: false, tuplet: tuplet, stemUp: nil, into: &xml)
-                } else {
-                    for (index, head) in chord.heads.enumerated() {
-                        writeNote(head, duration: length, value: chord.value, isChordMember: index > 0,
-                                  tieStart: head.tiesToNext, tieStop: tiedInto.contains(TieKey(start: chord.start, pitch: head.pitch)),
-                                  tuplet: index == 0 ? tuplet : nil, stemUp: chord.value.hasStem ? chord.stemUp : nil,
-                                  key: sketch.key, into: &xml)
-                    }
-                }
-                position = chord.start + length
-            }
-            fillRest(to: barEnd)
 
             if bar == sketch.barCount {
                 xml.open("barline", attributes: [("location", "right")])
@@ -135,6 +93,69 @@ public enum MusicXMLExporter {
             xml.close("measure")
         }
         xml.close("part")
+    }
+
+    /// 1小節の、1つの声部の音符と、隙間を埋める休符（コード記号は1つ目の声部に付ける）。
+    private static func writeVoice(_ voice: Notation.NotatedVoice, bar: Int, sketch: Sketch, harmonies: [ChordEvent],
+                                   into xml: inout XMLWriter) {
+        let time = sketch.timeSignature
+        let barStart = time.startTick(ofBar: bar)
+        let barEnd = barStart + time.ticksPerBar
+        let chords = voice.chords
+        let voiceNumber = voice.index + 1
+        let tupletStarts = Set(voice.tuplets.compactMap(\.first).map { chords[$0].start })
+        let tupletEnds = Set(voice.tuplets.compactMap(\.last).map { chords[$0].start })
+        let tiedInto = tiedTargets(chords)
+
+        // 小節内の音符（はみ出す分は切る）と、隙間を埋める休符を時間順に並べる
+        let inBar = chords.filter { $0.start >= barStart && $0.start < barEnd }
+        var position = barStart
+        var pendingHarmonies = harmonies
+
+        func emitHarmonies(from start: Tick, length: Tick) {
+            let due = pendingHarmonies.filter { $0.start < start + length }
+            for event in due {
+                writeHarmony(event.chord, offset: max(event.start - start, 0), into: &xml)
+            }
+            pendingHarmonies.removeAll { $0.start < start + length }
+        }
+
+        func fillRest(to end: Tick) {
+            guard end > position else { return }
+            if position == barStart && end == barEnd && inBar.isEmpty {
+                emitHarmonies(from: position, length: end - position)
+                writeMeasureRest(time.ticksPerBar, voice: voiceNumber, into: &xml)
+                position = end
+                return
+            }
+            for segment in NoteEditing.split(position..<end, timeSignature: time) {
+                emitHarmonies(from: segment.lowerBound, length: segment.count)
+                writeNote(nil, duration: segment.count, value: NoteDuration(ticks: segment.count), isChordMember: false,
+                          tieStart: false, tieStop: false, tuplet: nil, stemUp: nil, voice: voiceNumber, into: &xml)
+            }
+            position = end
+        }
+
+        for chord in inBar {
+            fillRest(to: chord.start)
+            guard chord.start >= position else { continue }  // 同じ声部で前の音と重なる音は書かない
+            let length = min(chord.end, barEnd) - chord.start
+            emitHarmonies(from: chord.start, length: length)
+            let tuplet: String? = tupletStarts.contains(chord.start) ? "start" : tupletEnds.contains(chord.start) ? "stop" : nil
+            if chord.isRest {
+                writeNote(nil, duration: length, value: chord.value, isChordMember: false,
+                          tieStart: false, tieStop: false, tuplet: tuplet, stemUp: nil, voice: voiceNumber, into: &xml)
+            } else {
+                for (index, head) in chord.heads.enumerated() {
+                    writeNote(head, duration: length, value: chord.value, isChordMember: index > 0,
+                              tieStart: head.tiesToNext, tieStop: tiedInto.contains(TieKey(start: chord.start, pitch: head.pitch)),
+                              tuplet: index == 0 ? tuplet : nil, stemUp: chord.value.hasStem ? chord.stemUp : nil,
+                              voice: voiceNumber, key: sketch.key, into: &xml)
+                }
+            }
+            position = chord.start + length
+        }
+        fillRest(to: barEnd)
     }
 
     private struct TieKey: Hashable {
@@ -227,17 +248,17 @@ public enum MusicXMLExporter {
         xml.close("harmony")
     }
 
-    private static func writeMeasureRest(_ duration: Tick, into xml: inout XMLWriter) {
+    private static func writeMeasureRest(_ duration: Tick, voice: Int, into xml: inout XMLWriter) {
         xml.open("note")
         xml.empty("rest", attributes: [("measure", "yes")])
         xml.element("duration", String(duration))
-        xml.element("voice", "1")
+        xml.element("voice", String(voice))
         xml.close("note")
     }
 
     private static func writeNote(
         _ head: NotatedHead?, duration: Tick, value: NoteDuration, isChordMember: Bool,
-        tieStart: Bool, tieStop: Bool, tuplet: String?, stemUp: Bool?, key: Key = .cMajor, into xml: inout XMLWriter
+        tieStart: Bool, tieStop: Bool, tuplet: String?, stemUp: Bool?, voice: Int, key: Key = .cMajor, into xml: inout XMLWriter
     ) {
         xml.open("note")
         if isChordMember { xml.empty("chord") }
@@ -254,7 +275,7 @@ public enum MusicXMLExporter {
         xml.element("duration", String(duration))
         if tieStop { xml.empty("tie", attributes: [("type", "stop")]) }
         if tieStart { xml.empty("tie", attributes: [("type", "start")]) }
-        xml.element("voice", "1")
+        xml.element("voice", String(voice))
         xml.element("type", typeName(value.value))
         if value.isDotted { xml.empty("dot") }
         if let alter = head?.accidental {
