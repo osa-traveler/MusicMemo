@@ -490,7 +490,16 @@ final class SketchStore {
 
     private func restore(_ snapshot: Snapshot) {
         clearNoteSelection()
+        // トラックの増減や音色が戻るときは、音色を読み込み直す（再生中なら止める）
+        let programs = { (sketch: Sketch) in Dictionary(uniqueKeysWithValues: sketch.tracks.map { ($0.id, $0.program) }) }
+        if programs(snapshot.sketch) != programs(sketch) {
+            stopPlayback()
+            sound.prepare(snapshot.sketch.tracks)
+        }
         sketch = snapshot.sketch
+        if editor.selectedTrackID.map({ id in !sketch.tracks.contains { $0.id == id } }) ?? true {
+            editor.selectedTrackID = sketch.tracks.first?.id
+        }
         pendingEntry = nil
         lastEntry = nil
         setEditPosition(snapshot.editPosition)
@@ -671,6 +680,101 @@ final class SketchStore {
         var state = editor
         state.previewPitch = nil
         return state
+    }
+
+    // MARK: トラックの操作
+
+    var canAddTrack: Bool { TrackEditing.canAdd(to: sketch) }
+
+    /// 役割のひな形でトラックを足す。below のトラック（省略なら選択中のトラック）のすぐ下に入れ、そのトラックを選ぶ。
+    func addTrack(role: TrackRole, below id: Track.ID? = nil) {
+        guard canAddTrack else { return }
+        let anchor = (id ?? editor.selectedTrackID).flatMap { id in sketch.tracks.firstIndex { $0.id == id } }
+        changeTracks {
+            guard let track = TrackEditing.addTrack(role: role, at: anchor.map { $0 + 1 }, in: &$0) else { return }
+            editor.selectedTrackID = track.id
+        }
+    }
+
+    func duplicateTrack(_ id: Track.ID) {
+        guard canAddTrack else { return }
+        changeTracks {
+            guard let copy = TrackEditing.duplicateTrack(id, in: &$0) else { return }
+            editor.selectedTrackID = copy.id
+        }
+    }
+
+    /// トラックを消す。選択中のトラックなら、同じ位置（無ければ1つ上）のトラックを選ぶ。
+    func removeTrack(_ id: Track.ID) {
+        guard sketch.tracks.count > 1, let index = sketch.tracks.firstIndex(where: { $0.id == id }) else { return }
+        changeTracks {
+            TrackEditing.removeTrack(id, in: &$0)
+            if editor.selectedTrackID == id {
+                editor.selectedTrackID = $0.tracks[min(index, $0.tracks.count - 1)].id
+            }
+        }
+    }
+
+    /// トラックを並べ替える。destination は動かす前の並びでの挿入位置。
+    func moveTrack(_ id: Track.ID, to destination: Int) {
+        var moved = sketch
+        TrackEditing.moveTrack(id, to: destination, in: &moved)
+        guard moved.tracks.map(\.id) != sketch.tracks.map(\.id) else { return }
+        recordUndo()
+        sketch = moved
+    }
+
+    func setTrackName(_ name: String, of id: Track.ID) {
+        editTrack(id, group: "name:\(id)") { TrackEditing.setName(name, of: &$0) }
+    }
+
+    func setTrackRole(_ role: TrackRole, of id: Track.ID) {
+        editTrack(id) { $0.role = role }
+    }
+
+    func setTrackClef(_ clef: Clef, of id: Track.ID) {
+        editTrack(id) { $0.clef = clef }
+    }
+
+    func setTrackColor(_ color: TrackColor, of id: Track.ID) {
+        editTrack(id) { $0.color = color }
+    }
+
+    /// 音色を変える（名前が音色名のままなら名前も変わる）。再生中なら止めてから読み込み、試しに1音鳴らす。
+    func setTrackProgram(_ program: Int, of id: Track.ID) {
+        guard let track = sketch.tracks.first(where: { $0.id == id }), track.program != program else { return }
+        stopPlayback()
+        editTrack(id) { TrackEditing.setProgram(program, of: &$0) }
+        sound.prepare(sketch.tracks.filter { $0.id == id })
+        let pitch = track.clef == .bass ? 43 : 67  // G2／G4
+        sound.noteOn(pitch, track: id)
+        Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            sound.noteOff(pitch, track: id)
+        }
+    }
+
+    /// トラックの設定を変える（元に戻すで戻せる）。
+    private func editTrack(_ id: Track.ID, group: String? = nil, _ change: (inout Track) -> Void) {
+        guard let index = sketch.tracks.firstIndex(where: { $0.id == id }) else { return }
+        var track = sketch.tracks[index]
+        change(&track)
+        guard track != sketch.tracks[index] else { return }
+        recordUndo(group: group)
+        sketch.tracks[index] = track
+    }
+
+    /// トラックを足す・消す変更。新しいトラックの音色を読み込むので、再生中なら止める。
+    private func changeTracks(_ change: (inout Sketch) -> Void) {
+        stopPlayback()
+        clearNoteSelection()
+        recordUndo()
+        var changed = sketch
+        change(&changed)
+        sketch = changed
+        pendingEntry = nil
+        lastEntry = nil
+        sound.prepare(sketch.tracks)
     }
 
     func toggleMute(of id: Track.ID) {

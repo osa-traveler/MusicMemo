@@ -66,7 +66,7 @@ enum DebugLaunch {
         let isSet = { (name: String) in environment[name] != nil && environment[name] != "0" }
         if isSet("MUSICMEMO_SAMPLE") { return true }
         if isSet("MUSICMEMO_DOCUMENT_TEST") || isSet("MUSICMEMO_OPEN_FILE") { return false }
-        return ["MUSICMEMO_SNAPSHOT", "MUSICMEMO_PLAY_CHECK", "MUSICMEMO_INPUT_DEMO"].contains(where: isSet)
+        return ["MUSICMEMO_SNAPSHOT", "MUSICMEMO_PLAY_CHECK", "MUSICMEMO_INPUT_DEMO", "MUSICMEMO_TRACK_DEMO"].contains(where: isSet)
     }
 }
 #endif

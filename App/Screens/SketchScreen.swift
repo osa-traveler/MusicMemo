@@ -59,6 +59,7 @@ private struct SketchEditor: View {
             DebugInputDemo.runIfRequested(store)
             DebugPlaybackCheck.runIfRequested(store)
             DebugSettingsDemo.runIfRequested(store)
+            DebugTrackDemo.runIfRequested(store)
         }
         #endif
     }

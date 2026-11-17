@@ -20,6 +20,23 @@ struct ScoreView: View {
     @State private var mouseDragNote: Note.ID??
     /// iPad の範囲選択：長押しした位置。
     @State private var boxStart: CGPoint?
+    /// 設定を開いているトラック。
+    @State private var settingsTrackID: Track.ID?
+    /// 消す前に確かめているトラック（音符があるとき）。
+    @State private var pendingRemoval: Track?
+    /// トラック情報のドラッグでの並べ替え。
+    @State private var trackDrag: TrackDrag?
+
+    private struct TrackDrag {
+        var id: Track.ID
+        var index: Int
+        /// ドラッグを始めた位置（画面全体の座標の y）。
+        var startY: CGFloat
+        var offset: CGFloat = 0
+    }
+
+    /// 「＋ トラック」の行の高さ。
+    private static let addTrackRowHeight: CGFloat = 40
 
     private struct VerticalMetrics: Equatable {
         var offset: CGFloat = 0
@@ -117,6 +134,12 @@ struct ScoreView: View {
         .commandScrollZoom { factor, location in
             applyZoom(store.editor.zoom * factor, from: zoomAnchor(at: location))
         }
+        #if DEBUG
+        .onAppear {
+            // 開発用：MUSICMEMO_TRACK_DEMO=1 なら先頭のトラックの設定を開く（撮影用）
+            if DebugTrackDemo.mode == "1" { settingsTrackID = store.sketch.tracks.first?.id }
+        }
+        #endif
         .onChange(of: store.editor.zoom) {
             withAnimation(.easeOut(duration: 0.15)) { isHUDVisible = true }
             hudToken += 1
@@ -149,7 +172,7 @@ struct ScoreView: View {
     private func applyZoom(_ zoom: Double, from anchor: ZoomAnchor) {
         store.setZoom(zoom, anchorX: anchor.anchorX, contentX: anchor.contentX, baseZoom: anchor.zoom)
         let newRowHeight = rowHeight(available: rowsAreaHeight, zoom: store.editor.zoom)
-        let maxY = max(newRowHeight * CGFloat(store.sketch.tracks.count) - rowsAreaHeight, 0)
+        let maxY = max(newRowHeight * CGFloat(store.sketch.tracks.count) + Self.addTrackRowHeight - rowsAreaHeight, 0)
         let targetY = anchor.contentY * newRowHeight / max(anchor.rowHeight, 1) - anchor.anchorY
         verticalPosition.scrollTo(y: min(max(targetY, 0), maxY))
     }
@@ -201,11 +224,11 @@ struct ScoreView: View {
         store.scroll(toLeadingBar: leadingBar)
     }
 
-    private var headerDensity: TrackHeaderView.Density {
+    private var headerDensity: TrackHeaderDensity {
         headerDensity(zoom: store.editor.zoom)
     }
 
-    private func headerDensity(zoom: Double) -> TrackHeaderView.Density {
+    private func headerDensity(zoom: Double) -> TrackHeaderDensity {
         let layout = store.layout(zoom: zoom)
         if layout.isMinimal { return .minimal }
         if layout.isCompact { return .compact }
@@ -223,7 +246,7 @@ struct ScoreView: View {
 
     private func trackHeaders(rowHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
-            ForEach(store.sketch.tracks) { track in
+            ForEach(Array(store.sketch.tracks.enumerated()), id: \.element.id) { index, track in
                 TrackHeaderView(
                     track: track,
                     isSelected: store.editor.selectedTrackID == track.id,
@@ -231,11 +254,146 @@ struct ScoreView: View {
                     volume: Binding(get: { track.volume }, set: { store.setVolume($0, of: track.id) }),
                     pan: Binding(get: { track.pan }, set: { store.setPan($0, of: track.id) }),
                     onToggleMute: { store.toggleMute(of: track.id) },
-                    onToggleSolo: { store.toggleSolo(of: track.id) }
-                )
+                    onToggleSolo: { store.toggleSolo(of: track.id) },
+                    onShowSettings: { settingsTrackID = track.id }
+                ) {
+                    trackMenuItems(track)
+                }
                 .frame(height: rowHeight)
                 .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                 .onTapGesture { store.selectTrack(track.id) }
+                .popover(isPresented: Binding(get: { settingsTrackID == track.id }, set: { if !$0 { settingsTrackID = nil } }),
+                         arrowEdge: .trailing) {
+                    TrackSettingsView(store: store, trackID: track.id)
+                        .presentationCompactAdaptation(.popover)
+                }
+                #if os(macOS)
+                .contextMenu { trackMenuItems(track) }
+                // Mac：トラック情報をドラッグして並べ替える（スライダやボタンの上は、そちらの操作が先）
+                .gesture(
+                    DragGesture(minimumDistance: 4, coordinateSpace: .global)
+                        .onChanged { drag in updateTrackDrag(track: track, index: index, startY: drag.startLocation.y, y: drag.location.y) }
+                        .onEnded { _ in endTrackDrag(rowHeight: rowHeight) }
+                )
+                #else
+                // iPad：長押ししてからドラッグして並べ替える（普通のドラッグは縦スクロール）
+                .gesture(LongPressDragGesture(
+                    usesGlobalCoordinates: true,
+                    onBegan: { location in updateTrackDrag(track: track, index: index, startY: location.y, y: location.y) },
+                    onChanged: { location in updateTrackDrag(track: track, index: index, startY: nil, y: location.y) },
+                    onEnded: { endTrackDrag(rowHeight: rowHeight) }
+                ))
+                #endif
+                .modifier(TrackDragEffect(offset: trackDragOffset(for: track.id)))
+            }
+            addTrackRow
+        }
+        .overlay(alignment: .topLeading) { trackDropIndicator(rowHeight: rowHeight) }
+        .alert("「\(pendingRemoval?.name ?? "")」を消しますか？", isPresented: Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } }),
+               presenting: pendingRemoval) { track in
+            Button("消す", role: .destructive) { store.removeTrack(track.id) }
+            Button("キャンセル", role: .cancel) {}
+        } message: { track in
+            Text("音符が\(track.notes.filter { !$0.isRest }.count)個あります。元に戻すで戻せます。")
+        }
+    }
+
+    /// トラック情報のメニュー（「…」と、Mac の右クリック）。
+    @ViewBuilder
+    private func trackMenuItems(_ track: Track) -> some View {
+        Button("トラックの設定…") { settingsTrackID = track.id }
+        Menu("下にトラックを追加") {
+            ForEach(TrackRole.allCases, id: \.self) { role in
+                Button(Self.addTitle(for: role)) { store.addTrack(role: role, below: track.id) }
+            }
+        }
+        .disabled(!store.canAddTrack)
+        Button("複製") { store.duplicateTrack(track.id) }
+            .disabled(!store.canAddTrack)
+        Divider()
+        Button("トラックを消す…", role: .destructive) { requestRemoval(of: track) }
+            .disabled(store.sketch.tracks.count <= 1)
+    }
+
+    /// 「メロディ（Piano）」のように、役割とその音色。
+    private static func addTitle(for role: TrackRole) -> String {
+        "\(role.displayName)（\(GMInstruments.name(of: TrackEditing.template(for: role).program))）"
+    }
+
+    /// 音符があるときだけ確かめてから消す。
+    private func requestRemoval(of track: Track) {
+        if track.notes.contains(where: { !$0.isRest }) {
+            pendingRemoval = track
+        } else {
+            store.removeTrack(track.id)
+        }
+    }
+
+    /// トラック列の一番下の「＋ トラック」（役割を選んで、選択中のトラックの下に足す）。
+    private var addTrackRow: some View {
+        Menu {
+            ForEach(TrackRole.allCases, id: \.self) { role in
+                Button(Self.addTitle(for: role)) { store.addTrack(role: role) }
+            }
+        } label: {
+            Label("トラック", systemImage: "plus")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(store.canAddTrack ? Palette.inkSecondary : Palette.inkTertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 14)
+                .frame(height: Self.addTrackRowHeight)
+                .contentShape(.rect)
+        }
+        .menuStyle(.button)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .disabled(!store.canAddTrack)
+        .frame(width: Metrics.trackHeaderWidth)
+        .background(Palette.paper)
+        .overlay(alignment: .trailing) { Palette.rule.frame(width: 1) }
+        .accessibilityLabel(store.canAddTrack ? "トラックを追加" : "トラックは\(TrackEditing.maximumCount)本まで")
+    }
+
+    // MARK: トラックの並べ替え
+
+    private func updateTrackDrag(track: Track, index: Int, startY: CGFloat?, y: CGFloat) {
+        if trackDrag?.id != track.id {
+            guard let startY else { return }
+            store.selectTrack(track.id)
+            trackDrag = TrackDrag(id: track.id, index: index, startY: startY)
+        }
+        trackDrag?.offset = y - (trackDrag?.startY ?? y)
+    }
+
+    private func endTrackDrag(rowHeight: CGFloat) {
+        guard let drag = trackDrag else { return }
+        let destination = trackDropIndex(drag, rowHeight: rowHeight)
+        withAnimation(.easeOut(duration: 0.15)) {
+            trackDrag = nil
+            store.moveTrack(drag.id, to: destination)
+        }
+    }
+
+    /// ドラッグ中のトラックの中心がある位置から、挿入位置（動かす前の並びで 0…トラック数）を求める。
+    private func trackDropIndex(_ drag: TrackDrag, rowHeight: CGFloat) -> Int {
+        let center = (CGFloat(drag.index) + 0.5) * rowHeight + drag.offset
+        return min(max(Int((center / rowHeight).rounded()), 0), store.sketch.tracks.count)
+    }
+
+    private func trackDragOffset(for id: Track.ID) -> CGFloat? {
+        trackDrag.flatMap { $0.id == id ? $0.offset : nil }
+    }
+
+    /// 挿入位置の青い線（動かない位置なら出さない）。
+    @ViewBuilder
+    private func trackDropIndicator(rowHeight: CGFloat) -> some View {
+        if let drag = trackDrag {
+            let destination = trackDropIndex(drag, rowHeight: rowHeight)
+            if destination != drag.index, destination != drag.index + 1 {
+                Palette.accent
+                    .frame(width: Metrics.trackHeaderWidth, height: 3)
+                    .offset(y: CGFloat(destination) * rowHeight - 1.5)
+                    .allowsHitTesting(false)
             }
         }
     }
@@ -282,6 +440,7 @@ struct ScoreView: View {
                         onEndDragSelection: { store.endDragSelection() }
                     )
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
+                    .modifier(TrackDragEffect(offset: trackDragOffset(for: track.id)))
                     .onTapGesture { location in
                         // 音符（休符）の上なら選ぶ（Mac の ⇧クリックは足す／外す）。
                         // それ以外は、タップしたトラックを選び、編集位置もそこへ動かす
@@ -340,6 +499,8 @@ struct ScoreView: View {
                     ))
                     #endif
                 }
+                // 「＋ トラック」の行の分
+                Color.clear.frame(width: layout.contentWidth, height: Self.addTrackRowHeight)
             }
         }
         .scrollIndicators(.hidden)
@@ -364,9 +525,23 @@ struct ScoreView: View {
                         leadingBarNumber: index == 0 ? layout.bar(atContentX: store.horizontalOffset + layout.stickyWidth + 1) : nil
                     )
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
+                    .modifier(TrackDragEffect(offset: trackDragOffset(for: track.id)))
                 }
             }
             .allowsHitTesting(false)
         }
+    }
+}
+
+/// 並べ替えでドラッグ中のトラック（情報・五線・音部記号）を指に合わせて動かし、浮いて見せる。
+private struct TrackDragEffect: ViewModifier {
+    let offset: CGFloat?
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: offset ?? 0)
+            .shadow(color: .black.opacity(offset == nil ? 0 : 0.18), radius: 8, y: 2)
+            .zIndex(offset == nil ? 0 : 1)
+            .opacity(offset == nil ? 1 : 0.92)
     }
 }

@@ -65,9 +65,16 @@ final class SoundEngine: @unchecked Sendable {
     }
 
     /// トラックの音色・音量・パンをそろえる（足りないサンプラーは作って音色を読み込む）。
+    /// 音色を読み込むときは、エンジンを止めてから読み込む（動いている最中に読み込むと落ちることがある）。
+    /// 再生中なら、呼ぶ前に再生を止めておく。エンジンは次に音を出すときに動かし直す。
     func prepare(_ tracks: [Track]) {
         let settings = tracks.map { ($0.id, $0.program, $0.volume, $0.pan) }
         queue.async { [self] in
+            if engine.isRunning, settings.contains(where: { programs[$0.0] != $0.1 }) {
+                scheduler.stop()
+                engine.stop()
+                log.info("音色を読み込むため、オーディオエンジンを止めた")
+            }
             for (id, program, volume, pan) in settings {
                 let sampler = sampler(for: id)
                 if programs[id] != program {

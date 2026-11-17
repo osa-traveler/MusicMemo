@@ -6,7 +6,8 @@ import UIKit
 /// UIKit の長押しは、指が動く前に認識されるので、普通のドラッグ（譜面のスクロール）とぶつからない。
 struct LongPressDragGesture: UIGestureRecognizerRepresentable {
     var minimumDuration: TimeInterval = 0.3
-    /// 位置はこのジェスチャーを付けたビューの座標。
+    /// 位置を画面全体の座標で返すか（付けたビュー自体が動くときに使う）。false ならこのジェスチャーを付けたビューの座標。
+    var usesGlobalCoordinates = false
     var onBegan: (CGPoint) -> Void
     var onChanged: (CGPoint) -> Void
     var onEnded: () -> Void
@@ -18,7 +19,7 @@ struct LongPressDragGesture: UIGestureRecognizerRepresentable {
     }
 
     func handleUIGestureRecognizerAction(_ recognizer: UILongPressGestureRecognizer, context: Context) {
-        let location = context.converter.localLocation
+        let location = usesGlobalCoordinates ? context.converter.location(in: .global) : context.converter.localLocation
         switch recognizer.state {
         case .began: onBegan(location)
         case .changed: onChanged(location)
