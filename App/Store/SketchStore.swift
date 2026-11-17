@@ -514,6 +514,48 @@ final class SketchStore {
         redoStack.removeAll()
     }
 
+    // MARK: セクションの操作
+
+    /// 曲の最後に小節を足して新しいセクションにし、その頭へ移る。
+    func appendSection() {
+        var added: SongSection?
+        changeSettings { added = SectionEditing.appendSection(in: &$0) }
+        if let added { jump(toBar: added.startBar) }
+    }
+
+    /// 編集位置の小節から後ろを新しいセクションに分ける。
+    func splitSectionAtEditPosition() {
+        let bar = editPositionBar
+        guard SectionEditing.canSplit(at: bar, in: sketch) else { return }
+        changeSettings { SectionEditing.splitSection(at: bar, in: &$0) }
+    }
+
+    var canSplitSectionAtEditPosition: Bool {
+        SectionEditing.canSplit(at: editPositionBar, in: sketch)
+    }
+
+    func renameSection(_ id: SongSection.ID, to name: String) {
+        guard let section = sketch.sections.first(where: { $0.id == id }),
+              section.name != name.trimmingCharacters(in: .whitespacesAndNewlines) else { return }
+        changeSettings(group: "sectionName:\(id)") { SectionEditing.rename(id, to: name, in: &$0) }
+    }
+
+    func resizeSection(_ id: SongSection.ID, to barCount: Int) {
+        changeSettings(group: "sectionLength:\(id)") { SectionEditing.resize(id, to: barCount, in: &$0) }
+    }
+
+    func duplicateSection(_ id: SongSection.ID) {
+        changeSettings { SectionEditing.duplicate(id, in: &$0) }
+    }
+
+    func mergeSectionWithPrevious(_ id: SongSection.ID) {
+        changeSettings { SectionEditing.mergeWithPrevious(id, in: &$0) }
+    }
+
+    func deleteSection(_ id: SongSection.ID) {
+        changeSettings { SectionEditing.delete(id, in: &$0) }
+    }
+
     // MARK: 曲の設定
 
     /// テキスト入力欄を編集中か（Mac の Delete・矢印・スペースのメニューを止める）。
@@ -541,10 +583,11 @@ final class SketchStore {
     }
 
     private func changeSettings(group: String? = nil, _ change: (inout Sketch) -> Void) {
-        clearNoteSelection()
-        recordUndo(group: group)
         var changed = sketch
         change(&changed)
+        guard changed != sketch else { return }
+        clearNoteSelection()
+        recordUndo(group: group)
         sketch = changed
         pendingEntry = nil
         lastEntry = nil

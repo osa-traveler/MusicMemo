@@ -60,6 +60,7 @@ private struct SketchEditor: View {
             DebugPlaybackCheck.runIfRequested(store)
             DebugSettingsDemo.runIfRequested(store)
             DebugTrackDemo.runIfRequested(store)
+            DebugSectionDemo.runIfRequested(store)
         }
         #endif
     }
