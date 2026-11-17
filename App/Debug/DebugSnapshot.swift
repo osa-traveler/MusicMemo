@@ -21,6 +21,14 @@ enum DebugSnapshot {
             guard let rep = view.bitmapImageRepForCachingDisplay(in: rect) else { exit(1) }
             view.cacheDisplay(in: rect, to: rep)
             try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+            // ポップオーバー（曲の設定など）が出ていれば、別のファイル（〜-popover.png）にも保存する
+            if let popover = NSApp.windows.first(where: { $0.isVisible && String(describing: type(of: $0)).contains("Popover") }),
+               let popoverView = popover.contentView,
+               let popoverRep = popoverView.bitmapImageRepForCachingDisplay(in: popoverView.bounds) {
+                popoverView.cacheDisplay(in: popoverView.bounds, to: popoverRep)
+                let popoverPath = (path as NSString).deletingPathExtension + "-popover.png"
+                try? popoverRep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: popoverPath))
+            }
             // MUSICMEMO_SAVE_ON_EXIT=1 なら、開いているファイルを保存してから終了する（保存の確認用）
             guard ProcessInfo.processInfo.environment["MUSICMEMO_SAVE_ON_EXIT"] == "1" else { exit(0) }
             NSDocumentController.shared.saveAllDocuments(nil)

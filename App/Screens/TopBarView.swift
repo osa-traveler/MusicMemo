@@ -3,7 +3,7 @@ import SwiftUI
 
 /// トップバー（高さ64）。戻る、曲名と曲の情報、再生／ループ／メトロノーム、元に戻す／やり直す、Logicへ書き出し。
 /// 戻るボタンはファイルを閉じて一覧へ戻る（Mac はウィンドウを閉じる）。
-struct TopBarView: View {
+struct TopBarView<Settings: View>: View {
     let sketch: Sketch
     let isPlaying: Bool
     let isMetronomeOn: Bool
@@ -16,19 +16,37 @@ struct TopBarView: View {
     let onUndo: () -> Void
     let onRedo: () -> Void
     let onExport: (ExportFormat) -> Void
+    /// 曲情報を押すと出す、曲の設定。
+    @ViewBuilder let settings: () -> Settings
+
+    @State private var isShowingSettings = TopBarDebug.showsSettingsOnLaunch
 
     var body: some View {
         HStack(spacing: 10) {
             iconButton("chevron.left", label: "スケッチ一覧へ戻る", size: 20, weight: .semibold, action: onBack)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(sketch.title)
-                    .font(.system(size: 17, weight: .bold))
-                Text(summary)
+            Button { isShowingSettings = true } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(sketch.title)
+                        .font(.system(size: 17, weight: .bold))
+                    HStack(spacing: 3) {
+                        Text(summary)
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.inkSecondary)
+                }
+                .lineLimit(1)
+                .contentShape(.rect)
             }
-            .lineLimit(1)
+            .buttonStyle(.plain)
+            .accessibilityLabel("曲の設定")
+            .accessibilityValue(summary)
+            .popover(isPresented: $isShowingSettings, arrowEdge: .bottom) {
+                settings()
+                    .presentationCompactAdaptation(.popover)
+            }
 
             Spacer(minLength: 0)
 
@@ -108,5 +126,16 @@ struct TopBarView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+}
+
+/// 開発用：MUSICMEMO_SETTINGS_DEMO があれば、起動時に曲の設定を開く（撮影用）。
+enum TopBarDebug {
+    static var showsSettingsOnLaunch: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["MUSICMEMO_SETTINGS_DEMO"].map { $0 != "0" } ?? false
+        #else
+        false
+        #endif
     }
 }

@@ -58,6 +58,7 @@ private struct SketchEditor: View {
         .onAppear {
             DebugInputDemo.runIfRequested(store)
             DebugPlaybackCheck.runIfRequested(store)
+            DebugSettingsDemo.runIfRequested(store)
         }
         #endif
     }
@@ -68,7 +69,9 @@ private struct SketchEditor: View {
                    onBack: { store.stopPlayback(); dismiss() },
                    onTogglePlayback: store.togglePlayback, onToggleMetronome: store.toggleMetronome,
                    onToggleLoop: store.toggleLoop, onUndo: store.undo, onRedo: store.redo,
-                   onExport: { Exporter.export(store.sketch, format: $0) })
+                   onExport: { Exporter.export(store.sketch, format: $0) }) {
+            SongSettingsView(store: store)
+        }
     }
 
     /// 曲名をファイル名にそろえる（書き出すファイルの名前にも使う）。

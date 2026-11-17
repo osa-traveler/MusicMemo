@@ -66,7 +66,7 @@ struct SketchCommands: Commands {
         CommandMenu("再生") {
             Button(store?.isPlaying == true ? "停止" : "再生") { store?.togglePlayback() }
                 .keyboardShortcut(.space, modifiers: [])
-                .disabled(store == nil)
+                .disabled(store == nil || store?.isEditingText == true)
             Button("ループ") { store?.toggleLoop() }
                 .keyboardShortcut("l", modifiers: .command)
                 .disabled(store == nil)
@@ -77,14 +77,14 @@ struct SketchCommands: Commands {
         CommandGroup(replacing: .undoRedo) {
             Button("元に戻す") { store?.undo() }
                 .keyboardShortcut("z", modifiers: .command)
-                .disabled(store?.canUndo != true)
+                .disabled(store?.canUndo != true || store?.isEditingText == true)
             Button("やり直す") { store?.redo() }
                 .keyboardShortcut("z", modifiers: [.command, .shift])
-                .disabled(store?.canRedo != true)
+                .disabled(store?.canRedo != true || store?.isEditingText == true)
             Divider()
             Button(store?.hasNoteSelection == true ? "選んだ音を消す" : "戻って消す") { store?.deleteKey() }
                 .keyboardShortcut(.delete, modifiers: [])
-                .disabled(store == nil)
+                .disabled(store == nil || store?.isEditingText == true)
             Divider()
             // 選んだ音符の移動（←→ 16分、↑↓ 半音、⇧↑↓ オクターブ）
             Group {
@@ -103,7 +103,7 @@ struct SketchCommands: Commands {
                 Button("選択を解除") { store?.clearNoteSelection() }
                     .keyboardShortcut(.escape, modifiers: [])
             }
-            .disabled(store?.hasNoteSelection != true || store?.isPlaying == true)
+            .disabled(store?.hasNoteSelection != true || store?.isPlaying == true || store?.isEditingText == true)
         }
         CommandGroup(after: .toolbar) {
             Button("拡大") { store?.stepZoom(1) }

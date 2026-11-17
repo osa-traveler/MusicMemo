@@ -35,6 +35,8 @@ final class SketchStore {
     }
     private var undoStack: [Snapshot] = []
     private var redoStack: [Snapshot] = []
+    /// 直前に積んだ変更のまとまり（テンポの −／＋ を続けて押したときなどは1つにまとめる）。
+    private var lastUndoGroup: String?
     var canUndo: Bool { !undoStack.isEmpty }
     var canRedo: Bool { !redoStack.isEmpty }
 
@@ -473,12 +475,14 @@ final class SketchStore {
     }
 
     func undo() {
+        lastUndoGroup = nil
         guard let snapshot = undoStack.popLast() else { return }
         redoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
         restore(snapshot)
     }
 
     func redo() {
+        lastUndoGroup = nil
         guard let snapshot = redoStack.popLast() else { return }
         undoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
         restore(snapshot)
@@ -493,9 +497,50 @@ final class SketchStore {
         revealEditPosition()
     }
 
-    private func recordUndo() {
+    /// 変更の前の状態を積む。group が直前と同じなら積まない（続けた操作を1回で戻す）。
+    private func recordUndo(group: String? = nil) {
+        defer { lastUndoGroup = group }
+        if let group, group == lastUndoGroup, !undoStack.isEmpty { return }
         undoStack.append(Snapshot(sketch: sketch, editPosition: editor.editPosition))
         redoStack.removeAll()
+    }
+
+    // MARK: 曲の設定
+
+    /// テキスト入力欄を編集中か（Mac の Delete・矢印・スペースのメニューを止める）。
+    var isEditingText = false
+
+    /// キーを変える。transpose が true なら音符とコードも移調する。
+    func setKey(_ key: Key, transpose: Bool) {
+        guard key != sketch.key else { return }
+        changeSettings { SongSettings.setKey(key, transpose: transpose, in: &$0) }
+    }
+
+    func setTimeSignature(_ time: TimeSignature) {
+        guard time != sketch.timeSignature else { return }
+        changeSettings { SongSettings.setTimeSignature(time, in: &$0) }
+    }
+
+    func setTempo(_ tempo: Double) {
+        guard tempo != sketch.tempo else { return }
+        changeSettings(group: "tempo") { SongSettings.setTempo(tempo, in: &$0) }
+    }
+
+    func setBarCount(_ count: Int) {
+        guard count != sketch.barCount else { return }
+        changeSettings(group: "barCount") { SongSettings.setBarCount(count, in: &$0) }
+    }
+
+    private func changeSettings(group: String? = nil, _ change: (inout Sketch) -> Void) {
+        clearNoteSelection()
+        recordUndo(group: group)
+        var changed = sketch
+        change(&changed)
+        sketch = changed
+        pendingEntry = nil
+        lastEntry = nil
+        setEditPosition(editor.editPosition)
+        if let tick = playheadTick, tick >= sketch.totalTicks { stopPlayback() }
     }
 
     private var selectedTrackIndex: Int? {
@@ -601,6 +646,7 @@ final class SketchStore {
         guard let last = lastPlaybackSketch else { return true }
         return last.tracks.map(\.notes) != sketch.tracks.map(\.notes)
             || last.playRange != sketch.playRange || last.isLooping != sketch.isLooping || last.tempo != sketch.tempo
+            || last.timeSignature != sketch.timeSignature || last.barCount != sketch.barCount
     }
 
     /// 音価を選ぶ。付点・3連符はそのまま保つ。
