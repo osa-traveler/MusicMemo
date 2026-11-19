@@ -8,6 +8,8 @@ struct StaffRowView: View {
     let editor: EditorState
     let layout: ScoreLayout
     let rowHeight: CGFloat
+    /// ミュート・ソロで鳴っているか（鳴っていなければ音符とコードネームを薄くする）。
+    var isAudible = true
     /// 選んでいる音符（このトラックのもの）。
     var selectedNoteIDs: Set<Note.ID> = []
     /// ドラッグ中の移動先（半透明の青で出す）。
@@ -125,7 +127,8 @@ struct StaffRowView: View {
         if track.showsChordSymbols {
             drawChordSymbols(bottomLineY: bottom, visible: visible, in: context)
         }
-        let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
+        let notes = NoteDrawing(layout: layout, bottomLineY: bottom,
+                                color: isAudible ? Palette.ink : Palette.ink.opacity(Palette.silentOpacity))
         for voice in voices {
             drawVoice(voice, with: notes, visible: visible, in: context)
         }
@@ -245,7 +248,7 @@ struct StaffRowView: View {
             let text = context.resolve(
                 Text(event.chord.symbol)
                     .font(.system(size: layout.textSize(15), weight: .bold))
-                    .foregroundStyle(Palette.chord)
+                    .foregroundStyle(Palette.chord.opacity(isAudible ? 1 : Palette.silentOpacity))
             )
             let size = text.measure(in: CGSize(width: CGFloat.infinity, height: .infinity))
             let origin = CGPoint(x: layout.x(tick: event.start) + layout.chordSymbolLeading,
@@ -299,7 +302,7 @@ struct StaffRowView: View {
 extension StaffRowView: Equatable {
     nonisolated static func == (lhs: StaffRowView, rhs: StaffRowView) -> Bool {
         lhs.track == rhs.track && lhs.sketch == rhs.sketch && lhs.editor == rhs.editor && lhs.layout == rhs.layout
-            && lhs.rowHeight == rhs.rowHeight && lhs.selectedNoteIDs == rhs.selectedNoteIDs
+            && lhs.rowHeight == rhs.rowHeight && lhs.isAudible == rhs.isAudible && lhs.selectedNoteIDs == rhs.selectedNoteIDs
             && lhs.dragPreview == rhs.dragPreview && lhs.selectionBox == rhs.selectionBox
     }
 }

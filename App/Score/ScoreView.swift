@@ -251,6 +251,7 @@ struct ScoreView: View {
                     track: track,
                     isSelected: store.editor.selectedTrackID == track.id,
                     density: headerDensity,
+                    isAudible: isAudible(track),
                     volume: Binding(get: { track.volume }, set: { store.setVolume($0, of: track.id) }),
                     pan: Binding(get: { track.pan }, set: { store.setPan($0, of: track.id) }),
                     onToggleMute: { store.toggleMute(of: track.id) },
@@ -439,6 +440,7 @@ struct ScoreView: View {
                     let isSelectedTrack = store.editor.selectedTrackID == track.id
                     StaffRowView(
                         track: track, sketch: store.sketch, editor: store.editor, layout: layout, rowHeight: rowHeight,
+                        isAudible: isAudible(track),
                         selectedNoteIDs: isSelectedTrack ? store.selectedNoteIDs : [],
                         dragPreview: isSelectedTrack ? store.noteDrag?.preview ?? [] : [],
                         selectionBox: store.selectionBox.flatMap { $0.trackID == track.id ? $0.rect : nil },

@@ -29,6 +29,12 @@ enum Palette {
     static let chord = Color(hex: 0xC2541F)
     static let playhead = Color(hex: 0xD92D20)
 
+    /// トラックの M（ミュート）・S（ソロ）を押しているときの色（Logic と同じく、ミュートは青、ソロは黄色）。
+    static let mute = Color(hex: 0x3B82F6)
+    static let solo = Color(hex: 0xF2C230)
+    /// 鳴っていないトラック（ミュート中、またはほかのトラックがソロ）の楽器名と音符の濃さ。
+    static let silentOpacity = 0.4
+
     static let trackBlue = Color(hex: 0x2F5BEA)
     static let trackOrange = Color(hex: 0xC2541F)
     static let trackGreen = Color(hex: 0x3D7A5C)
