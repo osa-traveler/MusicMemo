@@ -417,6 +417,12 @@ struct ScoreView: View {
         store.updateBoxSelection(rect: rect, hits: hits)
     }
 
+    /// ミュート・ソロで、トラックが鳴っているか（再生の決まりと同じ：ソロがあればソロのトラックだけ）。
+    private func isAudible(_ track: Track) -> Bool {
+        let anySolo = store.sketch.tracks.contains(where: \.isSoloed)
+        return !track.isMuted && (!anySolo || track.isSoloed)
+    }
+
     /// Mac で ⇧を押しているか（⇧クリック・⇧＋箱で選択に足す）。
     private static var isShiftDown: Bool {
         #if os(macOS)
@@ -439,6 +445,11 @@ struct ScoreView: View {
                         onDragSelection: { store.dragSelection(translation: $0) },
                         onEndDragSelection: { store.endDragSelection() }
                     )
+                    .equatable()
+                    .overlay(alignment: .topLeading) {
+                        PlayingNotesLayer(store: store, track: track, key: store.sketch.key, layout: layout, rowHeight: rowHeight,
+                                          isAudible: isAudible(track))
+                    }
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                     .modifier(TrackDragEffect(offset: trackDragOffset(for: track.id)))
                     .onTapGesture { location in
@@ -518,18 +529,33 @@ struct ScoreView: View {
         .overlay(alignment: .topLeading) {
             VStack(spacing: 0) {
                 ForEach(Array(store.sketch.tracks.enumerated()), id: \.element.id) { index, track in
-                    StickyClefView(
-                        track: track,
-                        layout: layout,
-                        rowHeight: rowHeight,
-                        leadingBarNumber: index == 0 ? layout.bar(atContentX: store.horizontalOffset + layout.stickyWidth + 1) : nil
-                    )
+                    Group {
+                        if index == 0 {
+                            LeadingStickyClef(store: store, track: track, layout: layout, rowHeight: rowHeight)
+                        } else {
+                            StickyClefView(track: track, layout: layout, rowHeight: rowHeight, leadingBarNumber: nil)
+                        }
+                    }
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                     .modifier(TrackDragEffect(offset: trackDragOffset(for: track.id)))
                 }
             }
             .allowsHitTesting(false)
         }
+    }
+}
+
+/// 先頭トラックの音部記号の欄（左上に、表示領域の左端にある小節の番号を出す）。
+/// 横スクロール量はここだけで読む（譜面の行で読むと、スクロールのたびに全トラックの五線が作り直されて重くなる）。
+private struct LeadingStickyClef: View {
+    let store: SketchStore
+    let track: Track
+    let layout: ScoreLayout
+    let rowHeight: CGFloat
+
+    var body: some View {
+        StickyClefView(track: track, layout: layout, rowHeight: rowHeight,
+                       leadingBarNumber: layout.bar(atContentX: store.horizontalOffset + layout.stickyWidth + 1))
     }
 }
 

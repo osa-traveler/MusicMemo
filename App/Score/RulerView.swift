@@ -14,12 +14,15 @@ struct RulerView: View {
     static let seekGrid = Timing.ticksPerSixteenth
 
     var body: some View {
-        Canvas { context, size in
-            // 音部記号の領域（左端に固定）には目盛りを出さない
-            context.clip(to: Path(CGRect(x: layout.stickyWidth - 1, y: 0, width: size.width, height: size.height)))
-            context.translateBy(x: -offset, y: 0)
-            drawTicks(visibleFrom: offset, to: offset + size.width, height: size.height, in: context)
-            drawEditMarker(in: context)
+        // 目盛りと編集位置の三角は別々に描く。再生中は三角だけが毎フレーム動くので、
+        // 目盛り（小節番号の文字を含む）はスクロールか倍率が変わったときだけ描き直す
+        ZStack {
+            RulerTicks(layout: layout, offset: offset)
+                .equatable()
+            Canvas { context, size in
+                Self.clipAndScroll(&context, layout: layout, offset: offset, size: size)
+                drawEditMarker(in: context)
+            }
         }
         .contentShape(Rectangle())
         .gesture(
@@ -30,7 +33,36 @@ struct RulerView: View {
         )
     }
 
-    private func drawTicks(visibleFrom minX: CGFloat, to maxX: CGFloat, height: CGFloat, in context: GraphicsContext) {
+    /// 音部記号の領域（左端に固定）には描かない。横スクロールの分だけずらしてコンテンツ座標で描く。
+    static func clipAndScroll(_ context: inout GraphicsContext, layout: ScoreLayout, offset: CGFloat, size: CGSize) {
+        context.clip(to: Path(CGRect(x: layout.stickyWidth - 1, y: 0, width: size.width, height: size.height)))
+        context.translateBy(x: -offset, y: 0)
+    }
+
+    private func drawEditMarker(in context: GraphicsContext) {
+        let x = layout.x(tick: editPosition)
+        var triangle = Path()
+        triangle.move(to: CGPoint(x: x - 7, y: 6))
+        triangle.addLine(to: CGPoint(x: x + 7, y: 6))
+        triangle.addLine(to: CGPoint(x: x, y: 15))
+        triangle.closeSubpath()
+        context.fill(triangle, with: .color(Palette.playhead))
+    }
+}
+
+/// ルーラの目盛りと小節番号。値が同じなら描き直さない。
+private struct RulerTicks: View, Equatable {
+    let layout: ScoreLayout
+    let offset: CGFloat
+
+    var body: some View {
+        Canvas { context, size in
+            RulerView.clipAndScroll(&context, layout: layout, offset: offset, size: size)
+            drawTicks(visibleFrom: offset, to: offset + size.width, height: size.height, in: context)
+        }
+    }
+
+    func drawTicks(visibleFrom minX: CGFloat, to maxX: CGFloat, height: CGFloat, in context: GraphicsContext) {
         let time = layout.timeSignature
         let firstBar = layout.bar(atContentX: minX)
         let lastBar = layout.bar(atContentX: maxX)
@@ -74,16 +106,6 @@ struct RulerView: View {
         context.stroke(eighths, with: .color(Palette.rulerEighth), lineWidth: 1)
         context.stroke(beats, with: .color(Palette.inkSecondary), lineWidth: 1)
         context.stroke(bars, with: .color(Palette.inkSecondary), lineWidth: 1)
-    }
-
-    private func drawEditMarker(in context: GraphicsContext) {
-        let x = layout.x(tick: editPosition)
-        var triangle = Path()
-        triangle.move(to: CGPoint(x: x - 7, y: 6))
-        triangle.addLine(to: CGPoint(x: x + 7, y: 6))
-        triangle.addLine(to: CGPoint(x: x, y: 15))
-        triangle.closeSubpath()
-        context.fill(triangle, with: .color(Palette.playhead))
     }
 }
 

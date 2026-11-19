@@ -10,7 +10,7 @@
 - 曲全体を小節カードで見渡す全体ビュー（横スクロールバーを兼ねる）
 - 再生（ループ、ミュート・ソロ、メトロノーム）
 - 1曲＝1ファイルで自動保存（iCloud Drive に置けば iPad と Mac で共有）
-- MusicXML（コード記号付き）と MIDI で書き出し
+- MusicXML（コード記号付き）と MIDI で書き出し。昔の MIDI の読み込み（Mac）
 
 ## ドキュメント
 
@@ -55,6 +55,7 @@ open MusicMemo.xcodeproj
 | `Packages/MusicMemoCore/` | 曲データ、ファイル形式、記譜、入力、書き出しの処理（UI に依存しない。テストあり） |
 | `Support/Info.plist` | XcodeGen が生成（ファイル形式の登録など。編集は `project.yml` で。リポジトリには含めない） |
 | `Scripts/` | 補助スクリプト |
+| `Tools/midi2musicmemo/` | MIDI（.mid）を MusicMemo の曲（.musicmemo）に変換するコマンド（[使い方](Tools/midi2musicmemo/README.md)） |
 
 ## 一時ファイル（容量を空けるとき）
 
@@ -64,6 +65,7 @@ open MusicMemo.xcodeproj
 | --- | --- | --- | --- |
 | `.build/` | `Scripts/snapshot.sh` のビルドの結果（`.build/DerivedData`） | 数百MB〜数GB | 次の `Scripts/snapshot.sh` が最初からのビルドになる |
 | `Packages/MusicMemoCore/.build/` | モデル層のテストのビルドの結果 | 数百MB | 次の `swift test` が最初からのビルドになる |
+| `Tools/midi2musicmemo/.build/` | 変換コマンドのビルドの結果 | 数百MB | 次の `swift run` が最初からのビルドになる |
 | `App/Resources/SoundFonts/*.sf2` | 音源（FluidR3_GM） | 約148MB | `Scripts/fetch-soundfont.sh` で取り直す（ネットが要る）。取り直すまで iPad では音が鳴らない |
 | `MusicMemo.xcodeproj/`、`Support/Info.plist` | XcodeGen が作るプロジェクトと Info.plist | 小さい | `xcodegen generate` で作り直す |
 | `.swiftpm/`（各所） | Xcode がパッケージを開いたときの設定 | 小さい | Xcode が作り直す |
@@ -71,14 +73,14 @@ open MusicMemo.xcodeproj
 消し方（リポジトリの一番上で）：
 
 ```sh
-rm -rf .build Packages/MusicMemoCore/.build
+rm -rf .build Packages/MusicMemoCore/.build Tools/midi2musicmemo/.build
 ```
 
 Xcode の `~/Library/Developer/Xcode/DerivedData/MusicMemo-*` も同じ一時ファイル（Xcode の画面からビルドしたとき）。ただし、Xcode から実行中のアプリがあるときは消さない。
 
 ### 消さないもの
 
-- 上の表にないもの（`App/`・`Packages/` のソース、`docs/`、`old/`、`Scripts/` など）
+- 上の表にないもの（`App/`・`Packages/`・`Tools/` のソース、`docs/`、`old/`、`Scripts/` など）
 
 ## バックアップ（手元にしかないもの）
 

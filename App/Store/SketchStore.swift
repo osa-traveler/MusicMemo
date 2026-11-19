@@ -663,6 +663,9 @@ final class SketchStore {
 
     private func updatePlayhead() {
         guard isPlaying, let tick = sound.playheadTick() else { return }
+        #if DEBUG
+        FrameProbe.playheadUpdated()
+        #endif
         if !sketch.isLooping, tick >= sketch.totalTicks {
             stopPlayback()
             return
@@ -678,6 +681,9 @@ final class SketchStore {
         let visibleStart = horizontalOffset + layout.stickyWidth
         let visibleEnd = horizontalOffset + visibleStaffWidth
         guard visibleStaffWidth > 0, x < visibleStart || x > visibleEnd - 40 else { return }
+        #if DEBUG
+        FrameProbe.scrolls += 1
+        #endif
         scrollStaff(toOffset: x - layout.stickyWidth - 40)
     }
 

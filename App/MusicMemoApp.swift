@@ -9,6 +9,7 @@ struct MusicMemoApp: App {
     init() {
         #if DEBUG && os(macOS)
         DebugLaunch.openFileIfRequested()
+        DebugMIDIImport.runIfRequested()
         #endif
     }
 
@@ -20,12 +21,17 @@ struct MusicMemoApp: App {
                 .onAppear { DebugSnapshot.scheduleIfRequested() }
                 #endif
         }
-        .commands { SketchCommands() }
+        .commands {
+            SketchCommands()
+            #if os(macOS)
+            MIDIImportCommands()
+            #endif
+        }
         #if os(macOS)
         .defaultSize(width: 1194, height: 834)
         #endif
         #if DEBUG && os(macOS)
-        .defaultLaunchBehavior(DebugLaunch.opensSample || DebugLaunch.fileToOpen != nil ? .suppressed : .automatic)
+        .defaultLaunchBehavior(DebugLaunch.opensSample || DebugLaunch.fileToOpen != nil || DebugMIDIImport.isRequested ? .suppressed : .automatic)
         #endif
 
         #if DEBUG && os(macOS)
@@ -65,7 +71,7 @@ enum DebugLaunch {
         let environment = ProcessInfo.processInfo.environment
         let isSet = { (name: String) in environment[name] != nil && environment[name] != "0" }
         if isSet("MUSICMEMO_SAMPLE") { return true }
-        if isSet("MUSICMEMO_DOCUMENT_TEST") || isSet("MUSICMEMO_OPEN_FILE") { return false }
+        if isSet("MUSICMEMO_DOCUMENT_TEST") || isSet("MUSICMEMO_OPEN_FILE") || isSet("MUSICMEMO_IMPORT_MIDI") { return false }
         return ["MUSICMEMO_SNAPSHOT", "MUSICMEMO_PLAY_CHECK", "MUSICMEMO_INPUT_DEMO", "MUSICMEMO_TRACK_DEMO", "MUSICMEMO_SECTION_DEMO"].contains(where: isSet)
     }
 }

@@ -27,8 +27,27 @@ struct StaffRowView: View {
         var chords: [NotatedChord] { voices.flatMap(\.chords) }
     }
 
+    /// 記譜の元になる値。これが同じなら、前に計算した記譜を使う。
+    private struct NotationKey: Equatable {
+        var notes: [Note]
+        var clef: Clef
+        var key: Key
+        var timeSignature: TimeSignature
+    }
+
+    /// トラックごとに、最後に計算した記譜を覚えておく（五線・鳴っている音の表示・当たり判定で共有する）。
+    private static var notationCache: [Track.ID: (key: NotationKey, notation: StaffNotation)] = [:]
+
     static func notation(of track: Track, sketch: Sketch, layout: ScoreLayout) -> StaffNotation {
-        StaffNotation(voices: Notation.voices(for: track.notes, clef: track.clef, key: sketch.key, timeSignature: layout.timeSignature))
+        notation(of: track, key: sketch.key, timeSignature: layout.timeSignature)
+    }
+
+    static func notation(of track: Track, key: Key, timeSignature: TimeSignature) -> StaffNotation {
+        let cacheKey = NotationKey(notes: track.notes, clef: track.clef, key: key, timeSignature: timeSignature)
+        if let cached = notationCache[track.id], cached.key == cacheKey { return cached.notation }
+        let notation = StaffNotation(voices: Notation.voices(for: track.notes, clef: track.clef, key: key, timeSignature: timeSignature))
+        notationCache[track.id] = (cacheKey, notation)
+        return notation
     }
 
     /// point（行の座標）にある音符・休符。一番近い符頭を選ぶ。
@@ -50,70 +69,112 @@ struct StaffRowView: View {
         return track.notes.filter { note in hits.contains { $0.start == note.start && $0.pitch == note.pitch } }.map(\.id)
     }
 
+    /// 五線を描くタイルの幅。画面に入ったタイルだけを作って描く（曲全体を1枚で描くと、長い曲ではスクロールのたびの描き直しが重い）。
+    static let tileWidth: CGFloat = 800
+
     var body: some View {
+        #if DEBUG
+        let _ = FrameProbe.staffBodies += 1
+        #endif
         let notation = Self.notation(of: track, sketch: sketch, layout: layout)
         let voices = notation.voices
         let chords = notation.chords
         let selectedNotes = track.notes.filter { selectedNoteIDs.contains($0.id) }
-        Canvas { [voices, chords] context, size in
-            let bottom = layout.bottomLineY(rowHeight: size.height)
-            if isSelected {
-                drawInputBar(rowHeight: size.height, in: context)
-            }
-            if layout.showsDetail {
-                drawEighthGrid(bottomLineY: bottom, in: context)
-            }
-            StaffDrawing.staffLines(from: 0, to: size.width, bottomLineY: bottom, layout: layout, in: context)
-            drawBarLines(bottomLineY: bottom, in: context)
-            drawTimeSignature(bottomLineY: bottom, in: context)
-            if track.showsChordSymbols {
-                drawChordSymbols(bottomLineY: bottom, in: context)
-            }
-            let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
-            for voice in voices {
-                drawVoice(voice, with: notes, in: context)
-            }
-            if !selectedNotes.isEmpty {
-                let selection = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.accent)
-                for chord in chords {
-                    let here = selectedNotes.filter { $0.start == chord.start }
-                    guard !here.isEmpty else { continue }
-                    selection.drawSelected(chord, pitches: Set(here.compactMap(\.pitch)), in: context)
+        let contentWidth = layout.contentWidth
+        let tileCount = max(Int((contentWidth / Self.tileWidth).rounded(.up)), 1)
+        LazyHStack(spacing: 0) {
+            ForEach(Array(0..<tileCount), id: \.self) { index in
+                let minX = CGFloat(index) * Self.tileWidth
+                let width = max(min(Self.tileWidth, contentWidth - minX), 0)
+                Canvas { [voices, chords, selectedNotes] context, size in
+                    #if DEBUG
+                    let probeStart = ContinuousClock.now
+                    defer { FrameProbe.recordDraw(since: probeStart) }
+                    #endif
+                    var context = context
+                    context.translateBy(x: -minX, y: 0)
+                    // タイルの外に少しはみ出す記号（臨時記号・付点・旗・コードネーム）の分だけ広く見る
+                    let margin = 60 * layout.zoom
+                    draw(visible: (minX - margin)...(minX + width + margin), tile: minX...(minX + width), rowHeight: size.height,
+                         voices: voices, chords: chords, selectedNotes: selectedNotes, in: context)
                 }
-            }
-            if let selectionBox {
-                let box = Path(selectionBox.insetBy(dx: 0.5, dy: 0.5))
-                context.fill(box, with: .color(Palette.accent.opacity(0.08)))
-                context.stroke(box, with: .color(Palette.accent.opacity(0.7)), lineWidth: 1)
-            }
-            if !dragPreview.isEmpty {
-                drawDragPreview(bottomLineY: bottom, in: context)
-            } else if isSelected, selectedNotes.isEmpty {
-                drawPreviewNote(bottomLineY: bottom, in: context)
+                .frame(width: width, height: rowHeight)
             }
         }
-        .frame(width: layout.contentWidth, height: rowHeight)
+        .frame(width: contentWidth, height: rowHeight, alignment: .leading)
         .overlay(alignment: .topLeading) {
             selectionHandles(chords: chords, selectedNotes: selectedNotes)
         }
     }
 
+    /// 五線の中身を描く（コンテンツ座標）。visible にかかるものだけを描く。tile は五線を引く範囲。
+    private func draw(visible: ClosedRange<CGFloat>, tile: ClosedRange<CGFloat>, rowHeight: CGFloat, voices: [Notation.NotatedVoice],
+                      chords: [NotatedChord], selectedNotes: [Note], in context: GraphicsContext) {
+        let bottom = layout.bottomLineY(rowHeight: rowHeight)
+        if isSelected {
+            drawInputBar(rowHeight: rowHeight, in: context)
+        }
+        if layout.showsDetail {
+            drawEighthGrid(bottomLineY: bottom, visible: visible, in: context)
+        }
+        StaffDrawing.staffLines(from: tile.lowerBound, to: tile.upperBound, bottomLineY: bottom, layout: layout, in: context)
+        drawBarLines(bottomLineY: bottom, visible: visible, in: context)
+        if visible.contains(layout.stickyWidth) {
+            drawTimeSignature(bottomLineY: bottom, in: context)
+        }
+        if track.showsChordSymbols {
+            drawChordSymbols(bottomLineY: bottom, visible: visible, in: context)
+        }
+        let notes = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.ink)
+        for voice in voices {
+            drawVoice(voice, with: notes, visible: visible, in: context)
+        }
+        if !selectedNotes.isEmpty {
+            let selection = NoteDrawing(layout: layout, bottomLineY: bottom, color: Palette.accent)
+            for chord in chords where overlaps(chord.start, chord.start, visible) {
+                let here = selectedNotes.filter { $0.start == chord.start }
+                guard !here.isEmpty else { continue }
+                selection.drawSelected(chord, pitches: Set(here.compactMap(\.pitch)), in: context)
+            }
+        }
+        if let selectionBox {
+            let box = Path(selectionBox.insetBy(dx: 0.5, dy: 0.5))
+            context.fill(box, with: .color(Palette.accent.opacity(0.08)))
+            context.stroke(box, with: .color(Palette.accent.opacity(0.7)), lineWidth: 1)
+        }
+        if !dragPreview.isEmpty {
+            drawDragPreview(bottomLineY: bottom, in: context)
+        } else if isSelected, selectedNotes.isEmpty {
+            drawPreviewNote(bottomLineY: bottom, in: context)
+        }
+    }
+
+    /// tick の start〜end（音符の位置）が visible にかかるか。
+    private func overlaps(_ start: Tick, _ end: Tick, _ visible: ClosedRange<CGFloat>) -> Bool {
+        layout.x(tick: end) >= visible.lowerBound && layout.x(tick: start) <= visible.upperBound
+    }
+
     /// 1つの声部の音符・連桁・タイ・3連符。
-    private func drawVoice(_ voice: Notation.NotatedVoice, with notes: NoteDrawing, in context: GraphicsContext) {
+    /// visible にかかる音符・連桁・タイ・3連符だけを描く。
+    private func drawVoice(_ voice: Notation.NotatedVoice, with notes: NoteDrawing, visible: ClosedRange<CGFloat>, in context: GraphicsContext) {
         let chords = voice.chords
         let beamed = Set(voice.beamGroups.joined())
-        for (index, chord) in chords.enumerated() where !beamed.contains(index) {
+        let groupVisible = { (group: [Int]) in
+            guard let first = group.first, let last = group.last else { return false }
+            return overlaps(chords[first].start, chords[last].start, visible)
+        }
+        for (index, chord) in chords.enumerated() where !beamed.contains(index) && overlaps(chord.start, chord.start, visible) {
             notes.draw(chord, in: context)
         }
-        for group in voice.beamGroups {
+        for group in voice.beamGroups where groupVisible(group) {
             notes.drawBeamGroup(group.map { chords[$0] }, in: context)
         }
         // タイの行き先は同じ声部の中で探す
         let chordsByStart = Dictionary(chords.map { ($0.start, $0) }, uniquingKeysWith: { first, _ in first })
-        for chord in chords where chord.heads.contains(where: \.tiesToNext) {
+        for chord in chords where chord.heads.contains(where: \.tiesToNext) && overlaps(chord.start, chord.end, visible) {
             notes.drawTies(chord, next: chordsByStart[chord.end], in: context)
         }
-        for group in voice.tuplets {
+        for group in voice.tuplets where groupVisible(group) {
             notes.drawTuplet(group.map { chords[$0] }, in: context)
         }
     }
@@ -158,7 +219,7 @@ struct StaffRowView: View {
     }
 
     /// 拡大時、8分ごとの薄い縦線（五線の少し上下まで）。
-    private func drawEighthGrid(bottomLineY: CGFloat, in context: GraphicsContext) {
+    private func drawEighthGrid(bottomLineY: CGFloat, visible: ClosedRange<CGFloat>, in context: GraphicsContext) {
         let time = layout.timeSignature
         let eighth = Timing.ticksPerQuarter / 2
         let top = layout.y(staffPosition: 12, bottomLineY: bottomLineY)
@@ -166,6 +227,7 @@ struct StaffRowView: View {
         var path = Path()
         for tick in stride(from: 0, to: layout.barCount * time.ticksPerBar, by: eighth) {
             let x = layout.x(tick: tick)
+            guard visible.contains(x) else { continue }
             path.move(to: CGPoint(x: x, y: top))
             path.addLine(to: CGPoint(x: x, y: bottom))
         }
@@ -173,9 +235,13 @@ struct StaffRowView: View {
     }
 
     /// コードトラックの五線の上にコードネーム（オレンジ）。
-    private func drawChordSymbols(bottomLineY: CGFloat, in context: GraphicsContext) {
+    private func drawChordSymbols(bottomLineY: CGFloat, visible: ClosedRange<CGFloat>, in context: GraphicsContext) {
         let baselineY = layout.y(staffPosition: 8, bottomLineY: bottomLineY) - layout.chordSymbolOffset
+        // コードネームは右へ伸びるので、左は長めに見る
+        let reach = 160 * layout.zoom
         for event in sketch.chords {
+            let x = layout.x(tick: event.start)
+            guard x >= visible.lowerBound - reach, x <= visible.upperBound else { continue }
             let text = context.resolve(
                 Text(event.chord.symbol)
                     .font(.system(size: layout.textSize(15), weight: .bold))
@@ -199,11 +265,12 @@ struct StaffRowView: View {
         }
     }
 
-    private func drawBarLines(bottomLineY: CGFloat, in context: GraphicsContext) {
+    private func drawBarLines(bottomLineY: CGFloat, visible: ClosedRange<CGFloat>, in context: GraphicsContext) {
         let top = layout.y(staffPosition: 8, bottomLineY: bottomLineY)
         var path = Path()
         for bar in 1...(layout.barCount + 1) {
             let x = layout.barLineX(bar: bar)
+            guard visible.contains(x) else { continue }
             path.move(to: CGPoint(x: x, y: top))
             path.addLine(to: CGPoint(x: x, y: bottomLineY))
         }
@@ -223,6 +290,17 @@ struct StaffRowView: View {
                 digitX += 1.8 * layout.staffSpace
             }
         }
+    }
+}
+
+/// 中身（トラック・曲・画面状態・倍率・選択など）が同じなら作り直さない。
+/// 操作のクロージャはいつも同じ store の操作を呼ぶだけなので比べない（比べられないクロージャがあると、
+/// 横スクロールのたびに全トラックの記譜を計算し直して、再生中のページ送りで画面が止まっていた）。
+extension StaffRowView: Equatable {
+    nonisolated static func == (lhs: StaffRowView, rhs: StaffRowView) -> Bool {
+        lhs.track == rhs.track && lhs.sketch == rhs.sketch && lhs.editor == rhs.editor && lhs.layout == rhs.layout
+            && lhs.rowHeight == rhs.rowHeight && lhs.selectedNoteIDs == rhs.selectedNoteIDs
+            && lhs.dragPreview == rhs.dragPreview && lhs.selectionBox == rhs.selectionBox
     }
 }
 

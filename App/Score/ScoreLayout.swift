@@ -3,7 +3,7 @@ import MusicMemoCore
 
 /// 譜面の座標計算。音符・ルーラ・編集位置はすべてここを通すので位置が必ず揃う。
 /// 基準値は倍率100%（docs/reference/01_main_100.html）。
-struct ScoreLayout {
+struct ScoreLayout: Equatable {
     var zoom: CGFloat
     var timeSignature: TimeSignature
     var keySignature: KeySignature
