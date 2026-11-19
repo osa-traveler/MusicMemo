@@ -5,10 +5,14 @@ import SwiftUI
 enum Glyph: UInt32, CaseIterable {
     case gClef = 0xE050
     case fClef = 0xE062
+    case unpitchedPercussionClef1 = 0xE069
     case timeSig0 = 0xE080, timeSig1, timeSig2, timeSig3, timeSig4, timeSig5, timeSig6, timeSig7, timeSig8, timeSig9
     case noteheadWhole = 0xE0A2
     case noteheadHalf = 0xE0A3
     case noteheadBlack = 0xE0A4
+    case noteheadXWhole = 0xE0A7
+    case noteheadXHalf = 0xE0A8
+    case noteheadXBlack = 0xE0A9
     case augmentationDot = 0xE1E7
     case flag8thUp = 0xE240
     case flag8thDown = 0xE241

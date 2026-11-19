@@ -24,19 +24,39 @@ public enum MusicXMLExporter {
         xml.close("identification")
 
         xml.open("part-list")
+        let channels = MIDIExporter.channels(for: sketch.tracks)
         for (index, track) in sketch.tracks.enumerated() {
             let id = partID(index)
+            let pan = String(Int((Double(track.pan) / 64 * 90).rounded()))
             xml.open("score-part", attributes: [("id", id)])
             xml.element("part-name", track.name)
-            xml.open("score-instrument", attributes: [("id", "\(id)-I1")])
-            xml.element("instrument-name", track.name)
-            xml.close("score-instrument")
-            xml.open("midi-instrument", attributes: [("id", "\(id)-I1")])
-            xml.element("midi-channel", String(MIDIExporter.channel(forTrackAt: index) + 1))
-            xml.element("midi-program", String(track.program + 1))
-            xml.element("volume", String(track.volume))
-            xml.element("pan", String(Int((Double(track.pan) / 64 * 90).rounded())))
-            xml.close("midi-instrument")
+            if track.isDrums {
+                // ドラム：使っている楽器ごとに、10ch の音番号（midi-unpitched）を持つ楽器を並べる
+                let pitches = Set(track.notes.compactMap(\.pitch)).sorted()
+                for pitch in pitches {
+                    xml.open("score-instrument", attributes: [("id", drumInstrumentID(id, pitch))])
+                    xml.element("instrument-name", DrumMap.instrument(pitch).name)
+                    xml.close("score-instrument")
+                }
+                for pitch in pitches {
+                    xml.open("midi-instrument", attributes: [("id", drumInstrumentID(id, pitch))])
+                    xml.element("midi-channel", String(channels[index] + 1))
+                    xml.element("midi-unpitched", String(pitch + 1))
+                    xml.element("volume", String(track.volume))
+                    xml.element("pan", pan)
+                    xml.close("midi-instrument")
+                }
+            } else {
+                xml.open("score-instrument", attributes: [("id", "\(id)-I1")])
+                xml.element("instrument-name", track.name)
+                xml.close("score-instrument")
+                xml.open("midi-instrument", attributes: [("id", "\(id)-I1")])
+                xml.element("midi-channel", String(channels[index] + 1))
+                xml.element("midi-program", String(track.program + 1))
+                xml.element("volume", String(track.volume))
+                xml.element("pan", pan)
+                xml.close("midi-instrument")
+            }
             xml.close("score-part")
         }
         xml.close("part-list")
@@ -51,6 +71,9 @@ public enum MusicXMLExporter {
     }
 
     static func partID(_ index: Int) -> String { "P\(index + 1)" }
+
+    /// ドラムのパートの、楽器（10ch の音番号）ごとの ID。
+    static func drumInstrumentID(_ partID: String, _ pitch: MIDINote) -> String { "\(partID)-I\(pitch + 1)" }
 
     // MARK: パート
 
@@ -82,7 +105,7 @@ public enum MusicXMLExporter {
                     xml.close("backup")
                 }
                 writeVoice(voice, bar: bar, sketch: sketch, harmonies: carriesChords && voice.index == 0 ? sketch.chords(inBar: bar) : [],
-                           into: &xml)
+                           drumPartID: track.isDrums ? id : nil, into: &xml)
             }
 
             if bar == sketch.barCount {
@@ -96,8 +119,9 @@ public enum MusicXMLExporter {
     }
 
     /// 1小節の、1つの声部の音符と、隙間を埋める休符（コード記号は1つ目の声部に付ける）。
+    /// drumPartID があればドラムのパート（音の高さの代わりに表示位置と楽器を書く）。
     private static func writeVoice(_ voice: Notation.NotatedVoice, bar: Int, sketch: Sketch, harmonies: [ChordEvent],
-                                   into xml: inout XMLWriter) {
+                                   drumPartID: String? = nil, into xml: inout XMLWriter) {
         let time = sketch.timeSignature
         let barStart = time.startTick(ofBar: bar)
         let barEnd = barStart + time.ticksPerBar
@@ -150,7 +174,7 @@ public enum MusicXMLExporter {
                     writeNote(head, duration: length, value: chord.value, isChordMember: index > 0,
                               tieStart: head.tiesToNext, tieStop: tiedInto.contains(TieKey(start: chord.start, pitch: head.pitch)),
                               tuplet: index == 0 ? tuplet : nil, stemUp: chord.value.hasStem ? chord.stemUp : nil,
-                              voice: voiceNumber, key: sketch.key, into: &xml)
+                              voice: voiceNumber, key: sketch.key, drumPartID: drumPartID, into: &xml)
                 }
             }
             position = chord.start + length
@@ -180,8 +204,9 @@ public enum MusicXMLExporter {
         xml.open("attributes")
         xml.element("divisions", String(Timing.ticksPerQuarter))
         xml.open("key")
-        xml.element("fifths", String(KeySignature(sketch.key).fifths))
-        xml.element("mode", sketch.key.mode.rawValue)
+        // ドラム譜には調号を付けない
+        xml.element("fifths", track.isDrums ? "0" : String(KeySignature(sketch.key).fifths))
+        if !track.isDrums { xml.element("mode", sketch.key.mode.rawValue) }
         xml.close("key")
         xml.open("time")
         xml.element("beats", String(sketch.timeSignature.beats))
@@ -195,6 +220,8 @@ public enum MusicXMLExporter {
         case .bass:
             xml.element("sign", "F")
             xml.element("line", "4")
+        case .percussion:
+            xml.element("sign", "percussion")
         }
         xml.close("clef")
         xml.close("attributes")
@@ -258,11 +285,20 @@ public enum MusicXMLExporter {
 
     private static func writeNote(
         _ head: NotatedHead?, duration: Tick, value: NoteDuration, isChordMember: Bool,
-        tieStart: Bool, tieStop: Bool, tuplet: String?, stemUp: Bool?, voice: Int, key: Key = .cMajor, into xml: inout XMLWriter
+        tieStart: Bool, tieStop: Bool, tuplet: String?, stemUp: Bool?, voice: Int, key: Key = .cMajor, drumPartID: String? = nil,
+        into xml: inout XMLWriter
     ) {
         xml.open("note")
         if isChordMember { xml.empty("chord") }
-        if let head {
+        if let head, drumPartID != nil {
+            // ドラム：五線上の位置（ト音記号と同じ読み方）を表示の音名で書く
+            let step = 4 * 7 + 2 + head.staffPosition
+            let octave = Int((Double(step) / 7).rounded(.down))
+            xml.open("unpitched")
+            xml.element("display-step", String("CDEFGAB"[String.Index(utf16Offset: step - octave * 7, in: "CDEFGAB")]))
+            xml.element("display-octave", String(octave))
+            xml.close("unpitched")
+        } else if let head {
             let spelled = SpelledPitch(head.pitch, in: key)
             xml.open("pitch")
             xml.element("step", String("CDEFGAB"[String.Index(utf16Offset: spelled.letter, in: "CDEFGAB")]))
@@ -275,6 +311,7 @@ public enum MusicXMLExporter {
         xml.element("duration", String(duration))
         if tieStop { xml.empty("tie", attributes: [("type", "stop")]) }
         if tieStart { xml.empty("tie", attributes: [("type", "start")]) }
+        if let head, let drumPartID { xml.empty("instrument", attributes: [("id", drumInstrumentID(drumPartID, head.pitch))]) }
         xml.element("voice", String(voice))
         xml.element("type", typeName(value.value))
         if value.isDotted { xml.empty("dot") }
@@ -288,6 +325,7 @@ public enum MusicXMLExporter {
             xml.close("time-modification")
         }
         if let stemUp { xml.element("stem", stemUp ? "up" : "down") }
+        if head?.isCross == true { xml.element("notehead", "x") }
         if tieStart || tieStop || tuplet != nil {
             xml.open("notations")
             if tieStop { xml.empty("tied", attributes: [("type", "stop")]) }

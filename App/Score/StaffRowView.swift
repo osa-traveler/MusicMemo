@@ -335,6 +335,7 @@ struct StickyClefView: View {
         // SMuFL の音部記号は、ト音記号は G の線（第2線）、ヘ音記号は F の線（第4線）が基準点
         let (glyph, position): (Glyph, Int) = switch track.clef {
         case .treble: (.gClef, 2)
+        case .percussion: (.unpitchedPercussionClef1, 4)  // 真ん中の線を中心に
         case .bass: (.fClef, 6)
         }
         SMuFL.draw(glyph,

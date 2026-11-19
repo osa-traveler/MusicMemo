@@ -32,6 +32,8 @@ struct TrackSettingsView: View {
                         .focused($isNameFocused)
                         .onSubmit(commitName)
                 }
+                // ドラムは GM のドラムキットで鳴らし、ドラム譜で書く（音色・役割・音部記号は変えない）
+                if !track.isDrums {
                 GridRow {
                     label("音色")
                     instrumentMenu(track)
@@ -39,7 +41,7 @@ struct TrackSettingsView: View {
                 GridRow {
                     label("役割")
                     Picker("役割", selection: Binding(get: { track.role }, set: { store.setTrackRole($0, of: trackID) })) {
-                        ForEach(TrackRole.allCases, id: \.self) { role in
+                        ForEach(TrackRole.selectable, id: \.self) { role in
                             Text(role.displayName).tag(role)
                         }
                     }
@@ -57,6 +59,7 @@ struct TrackSettingsView: View {
                     .pickerStyle(.segmented)
                     .fixedSize()
                 }
+                }
                 GridRow {
                     label("色")
                     HStack(spacing: 8) {
@@ -67,6 +70,12 @@ struct TrackSettingsView: View {
                 }
             }
 
+            if track.isDrums {
+                Text("ドラムは GM のドラムキットで鳴らし、ドラム譜で表示します。鍵盤を押すとその楽器の音が鳴りますが、入力はまだできません。")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.inkTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if track.role == .chords {
                 Text("役割が「コード」のトラックは、五線の上にコードネームを出します。")
                     .font(.system(size: 11))

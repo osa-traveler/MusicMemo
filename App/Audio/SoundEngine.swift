@@ -68,7 +68,8 @@ final class SoundEngine: @unchecked Sendable {
     /// 音色を読み込むときは、エンジンを止めてから読み込む（動いている最中に読み込むと落ちることがある）。
     /// 再生中なら、呼ぶ前に再生を止めておく。エンジンは次に音を出すときに動かし直す。
     func prepare(_ tracks: [Track]) {
-        let settings = tracks.map { ($0.id, $0.program, $0.volume, $0.pan) }
+        // 音色の番号。ドラムは GM のドラムキット（バンクが別）なので 128 を足して区別する
+        let settings = tracks.map { ($0.id, $0.program + ($0.isDrums ? Self.drumKitOffset : 0), $0.volume, $0.pan) }
         queue.async { [self] in
             if engine.isRunning, settings.contains(where: { programs[$0.0] != $0.1 }) {
                 scheduler.stop()
@@ -191,18 +192,27 @@ final class SoundEngine: @unchecked Sendable {
         return sampler
     }
 
+    /// prepare で使う音色の番号のうち、これ以上はドラムキット（番号 - これ）。
+    private static let drumKitOffset = 128
+
     private func load(program: Int, into sampler: AVAudioUnitSampler) {
         guard let url = soundFontURL else { return }
+        let isDrumKit = program >= Self.drumKitOffset
         do {
             try sampler.loadSoundBankInstrument(
                 at: url,
-                program: UInt8(clamping: program),
-                bankMSB: Self.melodicBankMSB,
+                program: UInt8(clamping: isDrumKit ? program - Self.drumKitOffset : program),
+                bankMSB: isDrumKit ? Self.percussionBankMSB : Self.melodicBankMSB,
                 bankLSB: 0
             )
             log.info("音色を読み込んだ（program \(program)）")
         } catch {
             log.error("音色を読み込めない（program \(program)）: \(error.localizedDescription)")
+            // 音源に無いドラムキット（GS の拡張キットなど）は Standard で鳴らす
+            if isDrumKit, program != Self.drumKitOffset {
+                log.info("ドラムキット \(program - Self.drumKitOffset) が無いので Standard にする")
+                load(program: Self.drumKitOffset, into: sampler)
+            }
         }
     }
 

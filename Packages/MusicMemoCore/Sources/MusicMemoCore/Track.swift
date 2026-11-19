@@ -3,6 +3,8 @@ import Foundation
 public enum Clef: String, Codable, Sendable {
     case treble
     case bass
+    /// ドラム譜（打楽器記号。音の高さではなく楽器ごとの位置に書く。DrumMap）。
+    case percussion
 }
 
 public enum TrackRole: String, CaseIterable, Codable, Sendable {
@@ -11,6 +13,11 @@ public enum TrackRole: String, CaseIterable, Codable, Sendable {
     case bass
     case pad
     case other
+    /// ドラム（GM の 10ch）。曲に1本だけ。ほかの役割とは入れ替えられない。
+    case drums
+
+    /// トラックの設定などで選べる役割（ドラムは読み込みでだけ作る）。
+    public static let selectable: [TrackRole] = [.melody, .chords, .bass, .pad, .other]
 
     /// トラック情報列に出す名前。
     public var displayName: String {
@@ -20,6 +27,7 @@ public enum TrackRole: String, CaseIterable, Codable, Sendable {
         case .bass: "ベース"
         case .pad: "パッド"
         case .other: "その他"
+        case .drums: "ドラム"
         }
     }
 }
@@ -79,6 +87,9 @@ public struct Track: Identifiable, Hashable, Codable, Sendable {
         self.program = program
         self.notes = notes
     }
+
+    /// ドラムのトラック（10ch で鳴らし、ドラム譜で書く）。
+    public var isDrums: Bool { role == .drums }
 
     /// コードトラックは五線の上にコードネームを表示する。
     public var showsChordSymbols: Bool { role == .chords }

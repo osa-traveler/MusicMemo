@@ -30,7 +30,8 @@ public struct MIDIImportResult: Sendable {
 
 /// MIDI（SMF）を MusicMemo の曲（.musicmemo）にする。
 ///
-/// - MIDI のトラックごと（1つのトラックに複数のチャンネルがあればチャンネルごと）に MusicMemo のトラックにする。10ch（ドラム）は除く
+/// - MIDI のトラックごと（1つのトラックに複数のチャンネルがあればチャンネルごと）に MusicMemo のトラックにする
+/// - 10ch（ドラム）は、どのトラックにあっても1本のドラムのトラックにまとめ、最後に置く（長さは同じ声部で次に叩くまで。タイは使わない）
 /// - 音の位置と長さは、拍ごとに 16分か8分3連の格子へそろえる（クオンタイズ）
 /// - 小節線をまたぐ音や1つの記号で書けない長さは、分けてタイでつなぐ
 /// - 2つの声部に収まらない小節は、重なる音を境目で分けてタイでつなぎ、和音にする
@@ -73,7 +74,7 @@ public enum MIDIImporter {
         let barTicks = timeSignature.ticksPerBar
 
         // トラック（MIDI のトラック × チャンネル）
-        var sources = collectSources(smf, scale: scale, warnings: &warnings)
+        var (sources, drums) = collectSources(smf, scale: scale, warnings: &warnings)
         if sources.count > TrackEditing.maximumCount {
             let dropped = sources[TrackEditing.maximumCount...].map(\.name)
             warnings.append("トラックは \(TrackEditing.maximumCount) 本までなので、後ろの \(dropped.count) 本（\(dropped.joined(separator: "、"))）は読み込みませんでした")
@@ -82,7 +83,7 @@ public enum MIDIImporter {
 
         // 曲の長さ（小節数）。音符の終わりと、セクション名（マーカー）の小節が収まる長さ
         let maxBars = SongSettings.barCountRange.upperBound
-        let lastEnd = sources.flatMap(\.notes).map(\.end).max() ?? 0
+        let lastEnd = (sources.flatMap(\.notes) + (drums?.notes ?? [])).map(\.end).max() ?? 0
         let lastMarkerBar = metas.filter { $0.type == 0x06 }.map { Int((Double($0.tick) / Double(barTicks)).rounded()) + 1 }.max() ?? 1
         var barCount = max(Int((Double(lastEnd) / Double(barTicks)).rounded(.up)), lastMarkerBar, 1)
         if barCount > maxBars {
@@ -111,6 +112,18 @@ public enum MIDIImporter {
         }
         assignRoles(&tracks, stats: stats)
 
+        // ドラム（最後に置く）
+        if let drums {
+            let quantized = quantize(drums.notes, allowTriplets: options.grid == .sixteenthAndTriplet)
+            let notes = drumNotes(quantized.notes.filter { $0.start < totalTicks }, barTicks: barTicks,
+                                  tripletBeats: quantized.tripletBeats, totalTicks: totalTicks)
+            tracks.append(Track(
+                name: drums.name, role: .drums, clef: .percussion, color: .gray,
+                volume: drums.volume, pan: drums.pan, program: drums.program, notes: notes
+            ))
+            stats.append(TrackStats(source: drums, shape: TrackShape(quantized.notes), tripletBeats: quantized.tripletBeats.count, joinedBars: 0))
+        }
+
         let sections = readSections(metas, barTicks: barTicks, barCount: barCount)
         let sketch = Sketch(
             title: title, key: key, timeSignature: timeSignature, tempo: tempo, barCount: barCount,
@@ -121,7 +134,12 @@ public enum MIDIImporter {
         report.append("\(key.description) · \(timeSignature.beats)/\(timeSignature.beatUnit) · ♩=\(tempoText(tempo)) · \(barCount)小節 · \(tracks.count)トラック")
         report.append("セクション：" + sections.map { "\($0.name)（\($0.startBar)〜）" }.joined(separator: "、"))
         for (index, (track, stat)) in zip(tracks, stats).enumerated() {
-            var line = "\(index + 1). \(track.name)：\(track.role.displayName)・\(track.clef == .bass ? "ヘ音" : "ト音")記号・GM \(track.program)"
+            let clefName = switch track.clef {
+            case .treble: "ト音記号"
+            case .bass: "ヘ音記号"
+            case .percussion: "ドラム譜"
+            }
+            var line = "\(index + 1). \(track.name)：\(track.role.displayName)・\(clefName)・\(track.isDrums ? "キット" : "GM") \(track.program)"
                 + "・ch\(stat.source.channel + 1)・音符 \(stat.source.notes.count)"
             if stat.tripletBeats > 0 { line += "・3連符で読んだ拍 \(stat.tripletBeats)" }
             if stat.joinedBars > 0 { line += "・和音にまとめた小節 \(stat.joinedBars)" }
@@ -222,9 +240,9 @@ public enum MIDIImporter {
     }
 
     /// MIDI のトラックごと（チャンネルが複数あればチャンネルごと）に音符を集める。10ch は除く。
-    static func collectSources(_ smf: SMFFile, scale: (Int) -> Tick, warnings: inout [String]) -> [Source] {
+    static func collectSources(_ smf: SMFFile, scale: (Int) -> Tick, warnings: inout [String]) -> (sources: [Source], drums: Source?) {
         var sources: [Source] = []
-        var drumNotes = 0
+        var drumNotes: [RawNote] = []
         // 音色・音量・パンがほかのトラック（指揮者トラックなど）にあるときのために、チャンネルごとの最初の値も覚える
         var channelProgram: [Int: Int] = [:], channelVolume: [Int: Int] = [:], channelPan: [Int: Int] = [:]
         for track in smf.tracks {
@@ -255,7 +273,8 @@ public enum MIDIImporter {
                 case let .controlChange(channel, 7, value): if volume[channel] == nil { volume[channel] = value }
                 case let .controlChange(channel, 10, value): if pan[channel] == nil { pan[channel] = value }
                 case let .noteOn(channel, pitch, _):
-                    if channel == 9 { drumNotes += 1; continue }
+                    // ドラムは叩いた位置だけを使う（長さはあとで決める）
+                    if channel == 9 { drumNotes.append(RawNote(start: tick, end: tick + 1, pitch: pitch)); continue }
                     open[[channel, pitch], default: []].append((tick, order))
                 case let .noteOff(channel, pitch):
                     guard channel != 9, var stack = open[[channel, pitch]], !stack.isEmpty else { continue }
@@ -291,8 +310,14 @@ public enum MIDIImporter {
                 ))
             }
         }
-        if drumNotes > 0 {
-            warnings.append("ドラム（10ch）の \(drumNotes) 音は読み込みませんでした")
+        var drums: Source?
+        if !drumNotes.isEmpty {
+            drums = Source(
+                name: "Drums", channel: 9, program: channelProgram[9] ?? 0,
+                volume: channelVolume[9].map { Int((Double($0) * 100 / 127).rounded()) } ?? 80,
+                pan: channelPan[9].map { $0 - 64 } ?? 0,
+                notes: drumNotes.sorted { ($0.start, $0.pitch) < ($1.start, $1.pitch) }
+            )
         }
         // 同じ名前のトラックには番号を付けて見分ける
         let counts = Dictionary(grouping: sources.map(\.name)) { $0 }.mapValues(\.count)
@@ -301,7 +326,7 @@ public enum MIDIImporter {
             seen[sources[index].name, default: 0] += 1
             sources[index].name += " \(seen[sources[index].name]!)"
         }
-        return sources
+        return (sources, drums)
     }
 
     // MARK: クオンタイズ
@@ -443,6 +468,28 @@ public enum MIDIImporter {
         return joined
     }
 
+    // MARK: ドラム
+
+    /// ドラムの音符：同じ位置・同じ楽器は1つにし、長さは同じ声部（手／足）で次に叩くまで。
+    /// 小節線・3連の拍の境目を越えず、1つの記号で書ける一番長い長さにする（タイは使わない。残りは休符になる）。
+    static func drumNotes(_ hits: [RawNote], barTicks: Tick, tripletBeats: Set<Int>, totalTicks: Tick) -> [Note] {
+        var result: [Note] = []
+        for isFoot in [false, true] {
+            let voiceHits = hits.filter { DrumMap.isFoot($0.pitch) == isFoot }
+            let onsets = Array(Set(voiceHits.map(\.start))).sorted()
+            let pitchesByOnset = Dictionary(grouping: voiceHits, by: \.start).mapValues { Set($0.map(\.pitch)).sorted() }
+            for (index, onset) in onsets.enumerated() {
+                let next = index + 1 < onsets.count ? onsets[index + 1] : totalTicks
+                let end = min(next, totalTicks)
+                guard end > onset, let first = split(onset..<end, barTicks: barTicks, tripletBeats: tripletBeats).first else { continue }
+                for pitch in pitchesByOnset[onset] ?? [] {
+                    result.append(Note(start: first.lowerBound, duration: first.count, pitch: pitch))
+                }
+            }
+        }
+        return result.sorted { ($0.start, $0.pitch ?? -1) < ($1.start, $1.pitch ?? -1) }
+    }
+
     // MARK: 役割の推定
 
     /// トラックの音の形（音域と同時に鳴る音の数）。
@@ -506,6 +553,7 @@ public enum MIDIImporter {
             case .chords: tracks[index].color = .orange
             case .bass: tracks[index].color = .green
             case .pad: tracks[index].color = .purple
+            case .drums: tracks[index].color = .gray
             case .other:
                 tracks[index].color = otherColors[otherCount % otherColors.count]
                 otherCount += 1

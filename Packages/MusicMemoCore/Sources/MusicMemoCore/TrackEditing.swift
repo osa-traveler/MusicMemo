@@ -13,6 +13,7 @@ public enum TrackEditing {
         case .bass: (33, .bass)         // Finger Bass
         case .pad: (48, .treble)        // Strings
         case .other: (0, .treble)       // Piano
+        case .drums: (0, .percussion)   // Standard Kit
         }
     }
 
@@ -22,8 +23,9 @@ public enum TrackEditing {
         return TrackColor.allCases.min { counts[$0, default: 0] < counts[$1, default: 0] } ?? .blue
     }
 
+    /// ドラムのトラック（10ch）は上限の外。
     public static func canAdd(to sketch: Sketch) -> Bool {
-        sketch.tracks.count < maximumCount
+        sketch.tracks.filter { !$0.isDrums }.count < maximumCount
     }
 
     /// 役割のひな形でトラックを作り、index の位置（省略なら末尾）に入れる。作ったトラックを返す（上限なら nil）。
@@ -40,7 +42,8 @@ public enum TrackEditing {
     /// トラックを複製してすぐ下に入れる（音符は新しい ID にする。タイのつながりは位置と高さで決まるのでそのまま）。
     @discardableResult
     public static func duplicateTrack(_ id: Track.ID, in sketch: inout Sketch) -> Track? {
-        guard canAdd(to: sketch), let index = sketch.tracks.firstIndex(where: { $0.id == id }) else { return nil }
+        // ドラムは曲に1本だけなので複製しない
+        guard canAdd(to: sketch), let index = sketch.tracks.firstIndex(where: { $0.id == id }), !sketch.tracks[index].isDrums else { return nil }
         var copy = sketch.tracks[index]
         copy.id = UUID()
         copy.isSoloed = false

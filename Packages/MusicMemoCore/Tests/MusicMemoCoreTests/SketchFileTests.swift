@@ -16,9 +16,10 @@ struct SketchFileTests {
     }
 
     @Test func rejectsNewerFormat() throws {
-        var file = SketchTemplate.blank()
-        file.formatVersion = SketchFile.currentFormatVersion + 1
-        let data = try file.encoded()
+        // 保存すると版は中身から決まるので、書いたあとの JSON の版を新しくする
+        let text = String(decoding: try SketchTemplate.blank().encoded(), as: UTF8.self)
+            .replacingOccurrences(of: "\"formatVersion\" : 1", with: "\"formatVersion\" : \(SketchFile.currentFormatVersion + 1)")
+        let data = Data(text.utf8)
         #expect(throws: SketchFile.ReadError.newerFormat(SketchFile.currentFormatVersion + 1)) {
             try SketchFile.decode(data)
         }

@@ -303,13 +303,13 @@ struct ScoreView: View {
     private func trackMenuItems(_ track: Track) -> some View {
         Button("トラックの設定…") { settingsTrackID = track.id }
         Menu("下にトラックを追加") {
-            ForEach(TrackRole.allCases, id: \.self) { role in
+            ForEach(TrackRole.selectable, id: \.self) { role in
                 Button(Self.addTitle(for: role)) { store.addTrack(role: role, below: track.id) }
             }
         }
         .disabled(!store.canAddTrack)
         Button("複製") { store.duplicateTrack(track.id) }
-            .disabled(!store.canAddTrack)
+            .disabled(!store.canAddTrack || track.isDrums)  // ドラムは曲に1本だけ
         Divider()
         Button("トラックを消す…", role: .destructive) { requestRemoval(of: track) }
             .disabled(store.sketch.tracks.count <= 1)
@@ -332,7 +332,7 @@ struct ScoreView: View {
     /// トラック列の一番下の「＋ トラック」（役割を選んで、選択中のトラックの下に足す）。
     private var addTrackRow: some View {
         Menu {
-            ForEach(TrackRole.allCases, id: \.self) { role in
+            ForEach(TrackRole.selectable, id: \.self) { role in
                 Button(Self.addTitle(for: role)) { store.addTrack(role: role) }
             }
         } label: {

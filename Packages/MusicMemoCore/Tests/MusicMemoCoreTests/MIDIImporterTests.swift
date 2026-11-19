@@ -3,7 +3,7 @@ import Testing
 @testable import MusicMemoCore
 
 /// テスト用の SMF を組み立てる。
-private struct SMFBuilder {
+struct SMFTestBuilder {
     var format = 1
     var division = 480
     var tracks: [[UInt8]] = []
@@ -75,7 +75,7 @@ private func shape(_ notes: [Note]) -> [[Int]] {
         let result = try MIDIImporter.convert(data, title: "往復")
         let decoded = try SketchFile.decode(result.file.encoded())
         #expect(decoded.sketch.title == "往復")
-        #expect(decoded.formatVersion == SketchFile.currentFormatVersion)
+        #expect(decoded.formatVersion == 1)  // ドラムが無ければ前の版のアプリでも開ける版
     }
 }
 
@@ -87,8 +87,8 @@ private func shape(_ notes: [Note]) -> [[Int]] {
             events.append((note.start, [0x90, note.pitch, 100]))
             events.append((note.start + note.length, [0x80, note.pitch, 0]))
         }
-        var builder = SMFBuilder(division: division)
-        builder.tracks = [SMFBuilder.track(events)]
+        var builder = SMFTestBuilder(division: division)
+        builder.tracks = [SMFTestBuilder.track(events)]
         return try MIDIImporter.convert(builder.data, title: "t", options: options)
     }
 
@@ -151,43 +151,43 @@ private func shape(_ notes: [Note]) -> [[Int]] {
     }
 
     @Test func compoundMeterBecomesSameLengthMeter() throws {
-        let result = try convert([(0, 480, 60)], extra: [(0, SMFBuilder.meta(0x58, [6, 3, 24, 8]))])
+        let result = try convert([(0, 480, 60)], extra: [(0, SMFTestBuilder.meta(0x58, [6, 3, 24, 8]))])
         #expect(result.file.sketch.timeSignature == TimeSignature(beats: 3, beatUnit: 4))
         #expect(result.warnings.contains { $0.contains("6/8") })
     }
 
     @Test func keySignatureIsRead() throws {
-        let minor = try convert([(0, 480, 60)], extra: [(0, SMFBuilder.meta(0x59, [0xFE, 1]))])   // ♭2つ・短調 = G minor
+        let minor = try convert([(0, 480, 60)], extra: [(0, SMFTestBuilder.meta(0x59, [0xFE, 1]))])   // ♭2つ・短調 = G minor
         #expect(minor.file.sketch.key == Key(tonic: 7, mode: .minor))
-        let forced = try convert([(0, 480, 60)], extra: [(0, SMFBuilder.meta(0x59, [0xFE, 1]))],
+        let forced = try convert([(0, 480, 60)], extra: [(0, SMFTestBuilder.meta(0x59, [0xFE, 1]))],
                                  options: MIDIImportOptions(key: Key(tonic: 2, mode: .major)))
         #expect(forced.file.sketch.key == Key(tonic: 2, mode: .major))
     }
 }
 
 @Suite struct MIDIImportReaderTests {
-    @Test func format0IsSplitByChannelAndDrumsAreSkipped() throws {
+    @Test func format0IsSplitByChannelAndDrumsGoLast() throws {
         let events: [(Int, [UInt8])] = [
-            (0, SMFBuilder.meta(0x03, Array("曲名".utf8))),
+            (0, SMFTestBuilder.meta(0x03, Array("曲名".utf8))),
             (0, [0xC0, 0]), (0, [0xC1, 33]),
             (0, [0x90, 72, 100]), (480, [0x80, 72, 0]),
             (0, [0x91, 36, 100]), (960, [0x81, 36, 0]),
             (0, [0x99, 36, 100]), (120, [0x89, 36, 0]),
         ]
-        var builder = SMFBuilder(format: 0)
-        builder.tracks = [SMFBuilder.track(events)]
+        var builder = SMFTestBuilder(format: 0)
+        builder.tracks = [SMFTestBuilder.track(events)]
         let result = try MIDIImporter.convert(builder.data, title: "t")
         let tracks = result.file.sketch.tracks
-        #expect(tracks.map(\.name) == ["Piano", "Finger Bass"])
-        #expect(tracks.map(\.role) == [.melody, .bass])
-        #expect(tracks.map(\.clef) == [.treble, .bass])
-        #expect(result.warnings.contains { $0.contains("ドラム") })
+        #expect(tracks.map(\.name) == ["Piano", "Finger Bass", "Drums"])
+        #expect(tracks.map(\.role) == [.melody, .bass, .drums])
+        #expect(tracks.map(\.clef) == [.treble, .bass, .percussion])
+        #expect(result.warnings.isEmpty)
     }
 
     @Test func runningStatusAndZeroVelocityNoteOff() throws {
         // 0x90 を省略し、ベロシティ0で止める
         let track: [UInt8] = [0, 0x90, 60, 100, 0x83, 0x60, 60, 0, 0, 62, 100, 0x83, 0x60, 62, 0, 0, 0xFF, 0x2F, 0]
-        var builder = SMFBuilder()
+        var builder = SMFTestBuilder()
         builder.tracks = [track]
         let notes = try MIDIImporter.convert(builder.data, title: "t").file.sketch.tracks[0].notes
         #expect(shape(notes) == [[0, 480, 60, 0], [480, 480, 62, 0]])
@@ -197,13 +197,13 @@ private func shape(_ notes: [Note]) -> [[Int]] {
         let name = Array("ピアノ".data(using: .shiftJIS)!)
         let marker = Array("サビ".data(using: .shiftJIS)!)
         let events: [(Int, [UInt8])] = [
-            (0, SMFBuilder.meta(0x03, name)),
-            (1920 * 2, SMFBuilder.meta(0x06, marker)),
+            (0, SMFTestBuilder.meta(0x03, name)),
+            (1920 * 2, SMFTestBuilder.meta(0x06, marker)),
             (0, [0x90, 60, 100]), (480, [0x80, 60, 0]),
             (1920 * 3, [0x90, 62, 100]), (1920 * 3 + 480, [0x80, 62, 0]),
         ]
-        var builder = SMFBuilder()
-        builder.tracks = [SMFBuilder.track(events)]
+        var builder = SMFTestBuilder()
+        builder.tracks = [SMFTestBuilder.track(events)]
         let sketch = try MIDIImporter.convert(builder.data, title: "t").file.sketch
         #expect(sketch.tracks[0].name == "ピアノ")
         #expect(sketch.sections.map(\.name) == ["サビ"])
@@ -212,8 +212,8 @@ private func shape(_ notes: [Note]) -> [[Int]] {
     }
 
     @Test func rmidWrapperIsAccepted() throws {
-        var builder = SMFBuilder()
-        builder.tracks = [SMFBuilder.track([(0, [0x90, 60, 100]), (480, [0x80, 60, 0])])]
+        var builder = SMFTestBuilder()
+        builder.tracks = [SMFTestBuilder.track([(0, [0x90, 60, 100]), (480, [0x80, 60, 0])])]
         let smf = builder.data
         var rmid = Data("RIFF".utf8) + Data([0, 0, 0, 0]) + Data("RMIDdata".utf8) + Data([0, 0, 0, 0])
         rmid += smf

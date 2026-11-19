@@ -25,7 +25,7 @@ public enum SongSettings {
         let semitones = transposition(from: sketch.key, to: key)
         sketch.key = key
         guard transpose, semitones != 0 else { return }
-        for index in sketch.tracks.indices {
+        for index in sketch.tracks.indices where !sketch.tracks[index].isDrums {  // ドラムは楽器の番号なので移調しない
             transposeNotes(&sketch.tracks[index].notes, by: semitones)
         }
         for index in sketch.chords.indices {

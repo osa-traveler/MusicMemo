@@ -279,7 +279,7 @@ private struct OverviewCard: View {
             let dotSize: CGFloat = 3.5
             for note in notes {
                 guard let pitch = note.pitch else { continue }
-                let position = clef.staffPosition(of: SpelledPitch(pitch, in: key))
+                let position = clef.staffPosition(ofPitch: pitch, in: key)
                 let y = min(max(16.5 - CGFloat(position) * 2, 0), size.height)
                 let fraction = CGFloat(note.start - barStart) / CGFloat(ticksPerBar)
                 let x = 2 + fraction * (size.width - 4 - dotSize)

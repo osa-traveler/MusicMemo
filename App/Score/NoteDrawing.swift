@@ -35,16 +35,11 @@ struct NoteDrawing {
 
         drawLedgerLines(chord, headLeft: headLeft, headWidth: headWidth, in: context)
 
-        let glyph: Glyph = switch chord.value.value {
-        case .whole: .noteheadWhole
-        case .half: .noteheadHalf
-        default: .noteheadBlack
-        }
         // ずらした符頭は、符幹が上向きなら右、下向きなら左へ
         let displacement = (chord.stemUp ? 1 : -1) * (headWidth - stemThickness)
         for head in chord.heads {
             let left = headLeft + (head.isDisplaced ? displacement : 0)
-            SMuFL.draw(glyph, at: CGPoint(x: left, y: y(head.staffPosition)), staffSpace: space, color: color, in: context)
+            SMuFL.draw(headGlyph(chord, head), at: CGPoint(x: left, y: y(head.staffPosition)), staffSpace: space, color: color, in: context)
         }
 
         drawAccidentals(chord, headLeft: headLeft, in: context)
@@ -101,18 +96,25 @@ struct NoteDrawing {
             drawRest(chord.value, centerX: centerX(chord), in: context)
             return
         }
-        let glyph: Glyph = switch chord.value.value {
-        case .whole: .noteheadWhole
-        case .half: .noteheadHalf
-        default: .noteheadBlack
-        }
         for head in chord.heads where pitches.contains(head.pitch) {
             let center = headCenter(chord, head)
             // 選んだ印：符頭の周りに薄い円
             let radius = 1.05 * space
             context.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius, width: 2 * radius, height: 2 * radius)),
                          with: .color(color.opacity(0.16)))
-            SMuFL.draw(glyph, at: CGPoint(x: center.x - headWidth(chord) / 2, y: center.y), staffSpace: space, color: color, in: context)
+            SMuFL.draw(headGlyph(chord, head), at: CGPoint(x: center.x - headWidth(chord) / 2, y: center.y), staffSpace: space, color: color, in: context)
+        }
+    }
+
+    /// 符頭のグリフ（音価と、ドラム譜の × かどうかで決める）。
+    private func headGlyph(_ chord: NotatedChord, _ head: NotatedHead) -> Glyph {
+        switch (chord.value.value, head.isCross) {
+        case (.whole, false): .noteheadWhole
+        case (.half, false): .noteheadHalf
+        case (_, false): .noteheadBlack
+        case (.whole, true): .noteheadXWhole
+        case (.half, true): .noteheadXHalf
+        case (_, true): .noteheadXBlack
         }
     }
 

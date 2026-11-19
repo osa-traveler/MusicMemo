@@ -9,6 +9,8 @@ public struct NotatedHead: Hashable, Sendable {
     public var isDisplaced: Bool
     /// 次の同じ音高の音へタイでつなぐか。
     public var tiesToNext: Bool = false
+    /// 符頭を × で書く（ドラム譜のシンバル類）。
+    public var isCross: Bool = false
 }
 
 /// 同じ開始位置の音符をまとめたもの（単音・和音・休符）。
@@ -102,6 +104,16 @@ public enum Notation {
             }
 
             let tiedPitches = Set(group.filter(\.tiesToNext).compactMap(\.pitch))
+            if clef == .percussion {
+                // ドラム譜：楽器ごとの位置に書き、臨時記号は付けない。符幹の向きは声部で決める（drumVoices）
+                var heads = pitches.map { pitch in
+                    NotatedHead(pitch: pitch, staffPosition: DrumMap.staffPosition(of: pitch), accidental: nil,
+                                isDisplaced: false, tiesToNext: tiedPitches.contains(pitch), isCross: DrumMap.isCross(pitch))
+                }
+                heads.sort { ($0.staffPosition, $0.pitch) < ($1.staffPosition, $1.pitch) }
+                result.append(NotatedChord(start: start, end: start + duration, value: value, heads: heads, stemUp: true))
+                continue
+            }
             var heads: [NotatedHead] = pitches.map { pitch in
                 let spelled = SpelledPitch(pitch, in: key)
                 let step = spelled.diatonicStep
@@ -247,6 +259,9 @@ public enum Notation {
     /// 両方の声部に音符がある小節では、高い方の声部の符幹を上、低い方を下にそろえる。
     /// 同じ位置で2つの声部の符頭が2度以内でぶつかるときは、符幹が下向きの方を右へずらす。
     public static func voices(for notes: [Note], clef: Clef, key: Key, timeSignature: TimeSignature) -> [NotatedVoice] {
+        if clef == .percussion {
+            return finishVoices(drumVoices(notes, timeSignature: timeSignature), timeSignature: timeSignature)
+        }
         let assignment = assignVoices(notes)
         let table = accidentals(for: notes, key: key, timeSignature: timeSignature)
         var voiceChords = assignment.voices.map {
@@ -278,6 +293,32 @@ public enum Notation {
             }
         }
 
+        return finishVoices(voiceChords, timeSignature: timeSignature)
+    }
+
+    /// ドラム譜の声部：手で叩く楽器（符幹が上）と、足で踏む楽器（符幹が下）。休符は手の声部に入れる。
+    static func drumVoices(_ notes: [Note], timeSignature: TimeSignature) -> [[NotatedChord]] {
+        let hands = notes.filter { note in note.pitch.map { !DrumMap.isFoot($0) } ?? true }
+        let feet = notes.filter { note in note.pitch.map(DrumMap.isFoot) ?? false }
+        var voices: [[NotatedChord]] = [hands]
+            .map { chords(for: $0, clef: .percussion, key: .cMajor, timeSignature: timeSignature, accidentals: nil) }
+        if !feet.isEmpty {
+            voices.append(chords(for: feet, clef: .percussion, key: .cMajor, timeSignature: timeSignature, accidentals: nil))
+        }
+        for voice in voices.indices {
+            let stemUp = voice == 0
+            for index in voices[voice].indices {
+                voices[voice][index].voice = voice
+                voices[voice][index].stemUp = stemUp
+                voices[voice][index].stemFixed = true
+                displaceSeconds(&voices[voice][index].heads, stemUp: stemUp)
+            }
+        }
+        return voices
+    }
+
+    /// 声部ごとの和音に、連桁・3連符を付け、同じ位置でぶつかる符頭をずらす。
+    static func finishVoices(_ voiceChords: [[NotatedChord]], timeSignature: TimeSignature) -> [NotatedVoice] {
         var result = voiceChords.enumerated().map { index, chords -> NotatedVoice in
             var chords = chords
             let beams = beamGroups(&chords, timeSignature: timeSignature)

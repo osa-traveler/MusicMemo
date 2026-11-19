@@ -15,13 +15,23 @@ public enum MIDIExporter {
         data.append(uint16: UInt16(Timing.ticksPerQuarter))
 
         data.append(chunk: conductorTrack(sketch))
-        for (index, track) in sketch.tracks.enumerated() {
-            data.append(chunk: instrumentTrack(track, channel: channel(forTrackAt: index)))
+        for (track, channel) in zip(sketch.tracks, channels(for: sketch.tracks)) {
+            data.append(chunk: instrumentTrack(track, channel: channel))
         }
         return data
     }
 
-    /// トラックごとのチャンネル。10ch（ドラム）は飛ばす。
+    /// トラックごとのチャンネル（0始まり）。ドラムは 10ch、ほかはトラック順に 10ch を飛ばして割り当てる。
+    public static func channels(for tracks: [Track]) -> [UInt8] {
+        var next = 0
+        return tracks.map { track in
+            if track.isDrums { return 9 }
+            defer { next += 1 }
+            return channel(forTrackAt: next)
+        }
+    }
+
+    /// ドラム以外の index 本目のチャンネル。10ch（ドラム）は飛ばす。
     static func channel(forTrackAt index: Int) -> UInt8 {
         let channel = index % 15
         return UInt8(channel >= 9 ? channel + 1 : channel)

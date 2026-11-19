@@ -242,9 +242,11 @@ final class SketchStore {
     /// 鍵を押した。押している鍵が無ければ新しい音として入力し、他の鍵を押している間や addToChord のときは和音に重ねる。
     func keyDown(_ pitch: MIDINote, addToChord: Bool = false) {
         clearNoteSelection()
-        editor.previewPitch = pitch
         heldKeys.insert(pitch)
         if let id = editor.selectedTrackID { sound.noteOn(pitch, track: id) }
+        // ドラムのトラックは音だけ鳴らす（その楽器の音。ドラムの入力はまだ作っていない）
+        guard selectedTrack?.isDrums != true else { return }
+        editor.previewPitch = pitch
         // 再生中は音だけ鳴らして入力しない（赤い線が動いていて入る位置が分かりにくいため）
         guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
 
@@ -281,7 +283,7 @@ final class SketchStore {
 
     /// 休符を選択中の音価で入力して進める。
     func enterRest() {
-        guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+        guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex, !sketch.tracks[trackIndex].isDrums else { return }
         clearNoteSelection()
         recordUndo()
         let range = NoteEditing.enter(
@@ -424,7 +426,7 @@ final class SketchStore {
         let clef = track.clef
         let transform = { (pitch: MIDINote) -> MIDINote in
             guard steps != 0 else { return pitch }
-            return clef.pitch(atStaffPosition: clef.staffPosition(of: SpelledPitch(pitch, in: key)) + steps, in: key)
+            return clef.pitch(atStaffPosition: clef.staffPosition(ofPitch: pitch, in: key) + steps, in: key)
         }
         if let pitch = anchor.pitch.map(transform), steps != noteDrag?.steps ?? 0 {
             audition(min(max(pitch, 0), 127))
@@ -447,7 +449,7 @@ final class SketchStore {
         let key = sketch.key
         let clef = track.clef
         moveSelection(by: drag.ticks, pitch: { pitch in
-            drag.steps == 0 ? pitch : clef.pitch(atStaffPosition: clef.staffPosition(of: SpelledPitch(pitch, in: key)) + drag.steps, in: key)
+            drag.steps == 0 ? pitch : clef.pitch(atStaffPosition: clef.staffPosition(ofPitch: pitch, in: key) + drag.steps, in: key)
         }, playsSound: false)
     }
 

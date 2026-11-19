@@ -3,15 +3,17 @@ import Foundation
 /// 1曲＝1ファイル（.musicmemo）の中身。JSON で保存する。
 /// 曲データに加えて、編集位置・選択中のトラック・倍率などの画面状態も保存し、開き直したときに戻す。
 public struct SketchFile: Codable, Equatable, Sendable {
-    /// ファイル形式の版。中身の形を変えたら上げて、古い版の読み込みに対応する。
-    public static let currentFormatVersion = 1
+    /// 読める一番新しいファイル形式の版。中身の形を変えたら上げて、古い版の読み込みに対応する。
+    /// - 1：最初の形
+    /// - 2：ドラムのトラック（役割 drums、音部記号 percussion）。ドラムの無い曲は 1 のまま保存し、前の版のアプリでも開けるようにする
+    public static let currentFormatVersion = 2
 
     public var formatVersion: Int
     public var sketch: Sketch
     public var editor: EditorState?
 
     public init(sketch: Sketch, editor: EditorState? = nil) {
-        self.formatVersion = Self.currentFormatVersion
+        self.formatVersion = Self.formatVersion(for: sketch)
         self.sketch = sketch
         self.editor = editor
     }
@@ -21,10 +23,17 @@ public struct SketchFile: Codable, Equatable, Sendable {
         case newerFormat(Int)
     }
 
+    /// 曲を保存するのに要る版（ドラムがあれば 2、無ければ 1）。
+    public static func formatVersion(for sketch: Sketch) -> Int {
+        sketch.tracks.contains(where: \.isDrums) ? 2 : 1
+    }
+
     public func encoded() throws -> Data {
+        var file = self
+        file.formatVersion = Self.formatVersion(for: sketch)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(self)
+        return try encoder.encode(file)
     }
 
     public static func decode(_ data: Data) throws -> SketchFile {

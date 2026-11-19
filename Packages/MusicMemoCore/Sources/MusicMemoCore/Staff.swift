@@ -77,6 +77,7 @@ public struct KeySignature: Hashable, Sendable {
 
     /// 調号の各記号の五線上の位置（第1線 = 0、1段 = 線と間の1つ分）。
     public func staffPositions(for clef: Clef) -> [Int] {
+        guard clef != .percussion else { return [] }  // ドラム譜には調号を付けない
         // ト音記号での位置。ヘ音記号は2段下がる。
         let treble = fifths >= 0 ? [8, 5, 9, 6, 3, 7, 4] : [4, 7, 3, 6, 2, 5, 1]
         let shift = clef == .bass ? -2 : 0
@@ -88,7 +89,7 @@ extension Clef {
     /// 第1線（一番下の線）の音の段数。ト音記号は E4、ヘ音記号は G2。
     var bottomLineStep: Int {
         switch self {
-        case .treble: 4 * 7 + 2
+        case .treble, .percussion: 4 * 7 + 2
         case .bass: 2 * 7 + 4
         }
     }
@@ -98,8 +99,15 @@ extension Clef {
         pitch.diatonicStep - bottomLineStep
     }
 
+    /// 音高の五線上の位置（ドラム譜なら楽器の位置）。
+    public func staffPosition(ofPitch pitch: MIDINote, in key: Key) -> Int {
+        self == .percussion ? DrumMap.staffPosition(of: pitch) : staffPosition(of: SpelledPitch(pitch, in: key))
+    }
+
     /// 五線上の位置にある、調の音階の音（調号どおりに変化させた幹音）。譜面上で音符を上下に動かすときに使う。
+    /// ドラム譜なら、その位置の代表の楽器。
     public func pitch(atStaffPosition position: Int, in key: Key) -> MIDINote {
+        if self == .percussion { return DrumMap.pitch(atStaffPosition: position) }
         let step = position + bottomLineStep
         let octave = Int((Double(step) / 7).rounded(.down))
         let letter = step - octave * 7
