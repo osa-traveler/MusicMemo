@@ -58,7 +58,7 @@ extension FocusedValues {
     @Entry var sketchStore: SketchStore?
 }
 
-/// メニュー：再生（再生／停止・ループ・メトロノーム）、編集（元に戻す／やり直す／戻って消す／選んだ音の移動）、表示（拡大／縮小／100%に戻す）。
+/// メニュー：再生（再生／停止・ループ・メトロノーム）、編集（元に戻す／やり直す／切り取り／コピー／貼り付け／戻って消す／選んだ音の移動）、表示（拡大／縮小／100%に戻す）。
 struct SketchCommands: Commands {
     @FocusedValue(\.sketchStore) private var store
 
@@ -105,6 +105,18 @@ struct SketchCommands: Commands {
             }
             .disabled(store?.hasNoteSelection != true || store?.isPlaying == true || store?.isEditingText == true)
         }
+        // 切り取り・コピー・貼り付け：名前などの文字を入力中は、文字の切り取り・コピー・貼り付けにする
+        CommandGroup(replacing: .pasteboard) {
+            Button("切り取り") { store?.isEditingText == false ? store?.cutSelection() : TextEditing.send(.cut) }
+                .keyboardShortcut("x", modifiers: .command)
+                .disabled(store?.isEditingText == false && (store?.hasNoteSelection != true || store?.isPlaying == true))
+            Button("コピー") { store?.isEditingText == false ? store?.copySelection() : TextEditing.send(.copy) }
+                .keyboardShortcut("c", modifiers: .command)
+                .disabled(store?.isEditingText == false && store?.hasNoteSelection != true)
+            Button("貼り付け") { store?.isEditingText == false ? store?.paste() : TextEditing.send(.paste) }
+                .keyboardShortcut("v", modifiers: .command)
+                .disabled(store?.isEditingText == false && store?.canPaste != true)
+        }
         CommandGroup(after: .toolbar) {
             Button("拡大") { store?.stepZoom(1) }
                 .keyboardShortcut("+", modifiers: .command)
@@ -116,5 +128,29 @@ struct SketchCommands: Commands {
                 .keyboardShortcut("0", modifiers: .command)
                 .disabled(store == nil)
         }
+    }
+}
+
+/// 文字の入力欄への切り取り・コピー・貼り付け（メニューの項目を音符用にしたので、入力中は標準の動作へ送る）。
+@MainActor
+enum TextEditing {
+    enum Action { case cut, copy, paste }
+
+    static func send(_ action: Action) {
+        #if os(macOS)
+        let selector = switch action {
+        case .cut: #selector(NSText.cut(_:))
+        case .copy: #selector(NSText.copy(_:))
+        case .paste: #selector(NSText.paste(_:))
+        }
+        NSApp.sendAction(selector, to: nil, from: nil)
+        #else
+        let selector = switch action {
+        case .cut: #selector(UIResponderStandardEditActions.cut(_:))
+        case .copy: #selector(UIResponderStandardEditActions.copy(_:))
+        case .paste: #selector(UIResponderStandardEditActions.paste(_:))
+        }
+        UIApplication.shared.sendAction(selector, to: nil, from: nil, for: nil)
+        #endif
     }
 }

@@ -7,11 +7,22 @@ import OSLog
 /// MUSICMEMO_INPUT_DEMO=2 なら、続けて音符の選択・移動・削除・範囲選択を流し、最後は複数の音のドラッグの途中で止める。
 /// MUSICMEMO_INPUT_DEMO=3 なら、範囲選択の箱を出したところで止める。
 /// MUSICMEMO_INPUT_DEMO=4 なら、10小節目に全音符の C E G を入れ、G だけを3拍目へ動かす（重なる音が和音になるか）。
+/// MUSICMEMO_INPUT_DEMO=5 なら、上の3トラックの6〜7小節を箱で囲み（トラックをまたぐ範囲選択）、1拍右・半音上へ動かし、
+/// 元に戻す1回で全トラックが戻るかをログに出す。最後はドラッグの途中で止める。
+/// MUSICMEMO_INPUT_DEMO=6 なら、コピー・貼り付け・切り取り（1トラック、続けて貼る、元に戻す、トラックをまたぐ）を流してログに出す。
 enum DebugInputDemo {
     @MainActor
     static func runIfRequested(_ store: SketchStore) {
         let mode = ProcessInfo.processInfo.environment["MUSICMEMO_INPUT_DEMO"]
-        guard let mode, ["1", "2", "3", "4"].contains(mode) else { return }
+        guard let mode, ["1", "2", "3", "4", "5", "6"].contains(mode) else { return }
+        if mode == "6" {
+            runCopyPasteDemo(store)
+            return
+        }
+        if mode == "5" {
+            runMultiTrackDemo(store)
+            return
+        }
         if mode == "4" {
             runChordToneMoveDemo(store)
             return
@@ -118,7 +129,109 @@ enum DebugInputDemo {
         log.notice("group -> \(bar7Notes(), privacy: .public)")
         // ドラッグの途中（右へ1拍、上へ1段）で止めて撮影
         store.dragSelection(translation: CGSize(width: 48 * layout.zoom, height: -layout.staffSpace / 2))
-        log.notice("dragging preview \(describe(store.noteDrag?.preview ?? []), privacy: .public)")
+        log.notice("dragging preview \(describe(store.noteDrag?.preview.values.flatMap { $0 } ?? []), privacy: .public)")
+    }
+
+    /// トラックをまたぐ範囲選択（箱の座標は全トラックの行を並べたもの。行の高さは最小値）。
+    @MainActor
+    private static func runMultiTrackDemo(_ store: SketchStore) {
+        let log = Logger(subsystem: "MusicMemo", category: "SelectDemo")
+        let layout = store.layout
+        let rowHeight = layout.minimumRowHeight
+        let time = store.sketch.timeSignature
+        let start = time.startTick(ofBar: 6), end = time.startTick(ofBar: 8)
+        func summary() -> String {
+            store.sketch.tracks.prefix(4).map { track in
+                let notes = track.notes.filter { $0.start >= start - 480 && $0.start < end + 480 && $0.pitch != nil }
+                return "\(track.name)[" + notes.map { "\($0.start - start):\(Pitch.noteName($0.pitch!))" }.joined(separator: " ") + "]"
+            }.joined(separator: " ")
+        }
+        guard store.sketch.tracks.count >= 3 else { return }
+        log.notice("multi before \(summary(), privacy: .public)")
+        store.scroll(toLeadingBar: 5)
+        // 1本目の行の上端から3本目の行の下端まで、6小節目の頭〜7小節目の終わりの少し手前
+        let rect = CGRect(x: layout.x(tick: start) - 4, y: 0, width: layout.x(tick: end - 60) - layout.x(tick: start) + 4,
+                          height: rowHeight * 3)
+        store.beginBoxSelection(track: store.sketch.tracks[0].id, adding: false)
+        var hits: [Note.ID] = []
+        for index in 0..<3 {
+            let slice = CGRect(x: rect.minX, y: 0, width: rect.width, height: rowHeight)
+            hits += StaffRowView.notes(in: slice, track: store.sketch.tracks[index], sketch: store.sketch, layout: layout, rowHeight: rowHeight)
+        }
+        store.updateBoxSelection(rect: rect, hits: hits)
+        store.endBoxSelection()
+        let byTrack = store.sketch.tracks.map { track in track.notes.filter { store.selectedNoteIDs.contains($0.id) }.count }
+        log.notice("multi selected \(store.selectedNotes.count) notes per track \(byTrack.map(String.init).joined(separator: ","), privacy: .public)")
+        store.nudgeSelection(ticks: 480)
+        log.notice("multi -> beat \(summary(), privacy: .public)")
+        store.nudgeSelection(semitones: 1)
+        log.notice("multi +1 \(summary(), privacy: .public)")
+        store.undo()
+        log.notice("multi undo1 \(summary(), privacy: .public)")
+        store.undo()
+        log.notice("multi undo2 \(summary(), privacy: .public)")
+        // もう一度囲んで、ドラッグの途中（右へ1拍、上へ1段）で止めて撮影
+        store.beginBoxSelection(track: store.sketch.tracks[0].id, adding: false)
+        store.updateBoxSelection(rect: rect, hits: hits)
+        store.endBoxSelection()
+        store.dragSelection(translation: CGSize(width: layout.x(tick: start + 480) - layout.x(tick: start), height: -layout.staffSpace / 2))
+        let previewCounts = store.sketch.tracks.map { store.noteDrag?.preview[$0.id]?.count ?? 0 }
+        log.notice("multi dragging preview per track \(previewCounts.map(String.init).joined(separator: ","), privacy: .public)")
+    }
+
+    /// コピー・貼り付け・切り取り。選択は箱と同じ当たり判定（行の高さは最小値）で作る。
+    @MainActor
+    private static func runCopyPasteDemo(_ store: SketchStore) {
+        let log = Logger(subsystem: "MusicMemo", category: "SelectDemo")
+        let layout = store.layout
+        let rowHeight = layout.minimumRowHeight
+        let time = store.sketch.timeSignature
+        func bars(_ first: Int, _ last: Int) -> String {
+            let start = time.startTick(ofBar: first), end = time.startTick(ofBar: last + 1)
+            return store.sketch.tracks.prefix(3).map { track in
+                let notes = track.notes.filter { $0.start >= start && $0.start < end && $0.pitch != nil }
+                return "\(track.name)[" + notes.map { "\(time.position(of: $0.start).barBeatDescription):\(Pitch.noteName($0.pitch!))" }.joined(separator: " ") + "]"
+            }.joined(separator: " ")
+        }
+        func select(tracks: Range<Int>, fromBar first: Int, throughBar last: Int) {
+            let start = time.startTick(ofBar: first), end = time.startTick(ofBar: last + 1)
+            let rect = CGRect(x: layout.x(tick: start) - 4, y: 0, width: layout.x(tick: end - 60) - layout.x(tick: start) + 4, height: rowHeight)
+            store.beginBoxSelection(track: store.sketch.tracks[tracks.lowerBound].id, adding: false)
+            var hits: [Note.ID] = []
+            for index in tracks {
+                hits += StaffRowView.notes(in: rect, track: store.sketch.tracks[index], sketch: store.sketch, layout: layout, rowHeight: rowHeight)
+            }
+            store.updateBoxSelection(rect: rect, hits: hits)
+            store.endBoxSelection()
+        }
+        guard store.sketch.tracks.count >= 3 else { return }
+        store.scroll(toLeadingBar: 5)
+        // 1トラック：Piano の6小節目をコピーして、12小節目に2回続けて貼る
+        select(tracks: 0..<1, fromBar: 6, throughBar: 6)
+        log.notice("copy source \(bars(6, 6), privacy: .public) selected \(store.selectedNotes.count)")
+        store.copySelection()
+        store.setEditPosition(time.startTick(ofBar: 12))
+        store.paste()
+        store.paste()
+        log.notice("paste x2 \(bars(12, 14), privacy: .public) edit \(time.position(of: store.editor.editPosition).description, privacy: .public) selected \(store.selectedNotes.count)")
+        store.undo()
+        log.notice("paste undo \(bars(12, 14), privacy: .public)")
+        // トラックをまたぐ：上3トラックの6小節目をコピーして、13小節目へ
+        select(tracks: 0..<3, fromBar: 6, throughBar: 6)
+        store.copySelection()
+        store.setEditPosition(time.startTick(ofBar: 13))
+        store.paste()
+        log.notice("multi paste \(bars(13, 13), privacy: .public)")
+        // 同じコピーを、2本目のトラックを選んでから14小節目へ（2本目から下へ貼る。はみ出す分は貼らない）
+        store.selectTrack(store.sketch.tracks[1].id)
+        store.setEditPosition(time.startTick(ofBar: 14))
+        store.paste()
+        log.notice("multi paste to track2 \(bars(14, 14), privacy: .public) \(store.sketch.tracks.count > 3 ? store.sketch.tracks[3].name : "-", privacy: .public)[\(store.sketch.tracks.count > 3 ? store.sketch.tracks[3].notes.filter { $0.start >= time.startTick(ofBar: 14) && $0.start < time.startTick(ofBar: 15) && $0.pitch != nil }.count : 0)]")
+        // 切り取り：Piano の12小節目
+        select(tracks: 0..<1, fromBar: 12, throughBar: 12)
+        store.cutSelection()
+        log.notice("cut \(bars(12, 12), privacy: .public) canPaste \(store.canPaste)")
+        store.scroll(toLeadingBar: 11)
     }
 
     @MainActor

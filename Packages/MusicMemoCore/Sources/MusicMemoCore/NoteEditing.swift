@@ -163,6 +163,37 @@ public enum NoteEditing {
         return placeJoined(ids: ids, moving: moving, moves: moves, in: &track, timeSignature: timeSignature)
     }
 
+    // MARK: 貼り付け
+
+    /// 音符（コピーしたもの）を、offset だけずらした位置に重ねて貼る（新しい ID の音符になる）。
+    /// 重ね方は音符を動かしたときと同じ：別の高さの音とは重ね、同じ高さの音と休符は上書き。
+    /// 声部が2つに収まらないときだけ、重なる音どうしを境目で分けてタイでつなぎ、和音にする（ドラムは楽器で声部が決まるので重ねるだけ）。
+    /// タイでつながった音は一続きのまま、小節線で分け直す。曲の終わりより後ろは切る。
+    /// - Returns: 貼った音符の ID（開始順）。
+    @discardableResult
+    public static func paste(_ notes: [Note], offset: Tick, in track: inout Track, timeSignature: TimeSignature, totalTicks: Tick) -> [Note.ID] {
+        var chains: [[Note]] = []
+        var seen = Set<Note.ID>()
+        for note in notes.sorted(by: { ($0.start, $0.pitch ?? -1) < ($1.start, $1.pitch ?? -1) }) where !seen.contains(note.id) {
+            let chain = tiedChain(containing: note.id, in: notes)
+            seen.formUnion(chain.map(\.id))
+            chains.append(chain)
+        }
+        let moves: [(range: Range<Tick>, pitch: MIDINote?)] = chains.compactMap { chain in
+            let start = max(chain[0].start + offset, 0)
+            let end = min(chain[chain.count - 1].end + offset, totalTicks)
+            return start < end ? (start..<end, chain[0].pitch) : nil
+        }
+        guard !moves.isEmpty else { return [] }
+        var layered = track
+        let placed = placeLayered(ids: [], moving: [], moves: moves, in: &layered, timeSignature: timeSignature)
+        if track.isDrums || !Notation.assignVoices(layered.notes).overflows {
+            track = layered
+            return placed
+        }
+        return placeJoined(ids: [], moving: [], moves: moves, in: &track, timeSignature: timeSignature)
+    }
+
     /// 移動の下ごしらえ：選んだ音を消し、移動先で同じ高さの音・休符を上書きし、手前の音からのタイを外す。
     /// - Returns: 元の位置で重なっていた音と、移動先（タイの一続きは1つの長い音として。同じ位置・同じ高さには重ねない）。
     private static func prepareMove(

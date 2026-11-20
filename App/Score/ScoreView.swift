@@ -405,17 +405,32 @@ struct ScoreView: View {
         return StaffRowView.hitNote(at: location, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
     }
 
-    /// 範囲選択の箱を広げる。箱は行の中に収め、左端の音部記号の下は含めない。
-    private func updateBox(from start: CGPoint, to end: CGPoint, track: Track, layout: ScoreLayout, rowHeight: CGFloat) {
+    /// 範囲選択の箱を広げる。start・end はドラッグを始めたトラック（trackIndex 本目）の行の座標。
+    /// 箱はトラックをまたげる（全トラックの行を縦に並べた座標にして、かかった各行の音符を選ぶ）。左端の音部記号の下は含めない。
+    private func updateBox(from start: CGPoint, to end: CGPoint, trackIndex: Int, layout: ScoreLayout, rowHeight: CGFloat) {
         let visibleLeft = store.horizontalOffset + layout.stickyWidth
-        let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
-            .intersection(CGRect(x: visibleLeft, y: 0, width: max(layout.contentWidth - visibleLeft, 0), height: rowHeight))
+        let top = CGFloat(trackIndex) * rowHeight
+        let tracks = store.sketch.tracks
+        let rect = CGRect(x: min(start.x, end.x), y: min(start.y, end.y) + top, width: abs(end.x - start.x), height: abs(end.y - start.y))
+            .intersection(CGRect(x: visibleLeft, y: 0, width: max(layout.contentWidth - visibleLeft, 0), height: CGFloat(tracks.count) * rowHeight))
         guard !rect.isNull else {
             store.updateBoxSelection(rect: .zero, hits: [])
             return
         }
-        let hits = StaffRowView.notes(in: rect, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
+        var hits: [Note.ID] = []
+        for (index, track) in tracks.enumerated() {
+            guard let slice = Self.boxSlice(rect, row: index, rowHeight: rowHeight) else { continue }
+            hits += StaffRowView.notes(in: slice, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
+        }
         store.updateBoxSelection(rect: rect, hits: hits)
+    }
+
+    /// 箱（全トラックの行を並べた座標）のうち、row 本目の行にかかる部分（その行の座標）。かからなければ nil。
+    private static func boxSlice(_ rect: CGRect, row: Int, rowHeight: CGFloat) -> CGRect? {
+        let rowRect = CGRect(x: rect.minX, y: CGFloat(row) * rowHeight, width: rect.width, height: rowHeight)
+        let slice = rect.intersection(rowRect)
+        guard !slice.isNull, slice.height > 0 else { return nil }
+        return slice.offsetBy(dx: 0, dy: -CGFloat(row) * rowHeight)
     }
 
     /// ミュート・ソロで、トラックが鳴っているか（再生の決まりと同じ：ソロがあればソロのトラックだけ）。
@@ -436,14 +451,14 @@ struct ScoreView: View {
     private func staffRows(layout: ScoreLayout, rowHeight: CGFloat) -> some View {
         ScrollView(.horizontal) {
             VStack(spacing: 0) {
-                ForEach(store.sketch.tracks) { track in
-                    let isSelectedTrack = store.editor.selectedTrackID == track.id
+                ForEach(Array(store.sketch.tracks.enumerated()), id: \.element.id) { trackIndex, track in
                     StaffRowView(
                         track: track, sketch: store.sketch, editor: store.editor, layout: layout, rowHeight: rowHeight,
                         isAudible: isAudible(track),
-                        selectedNoteIDs: isSelectedTrack ? store.selectedNoteIDs : [],
-                        dragPreview: isSelectedTrack ? store.noteDrag?.preview ?? [] : [],
-                        selectionBox: store.selectionBox.flatMap { $0.trackID == track.id ? $0.rect : nil },
+                        // 選択はトラックをまたげる。各行にはその行の分だけ渡す（ほかの行の選択が変わっても描き直さない）
+                        selectedNoteIDs: store.selectedNoteIDs.isEmpty ? [] : store.selectedNoteIDs.intersection(track.notes.map(\.id)),
+                        dragPreview: store.noteDrag?.preview[track.id] ?? [],
+                        selectionBox: store.selectionBox.flatMap { Self.boxSlice($0.rect, row: trackIndex, rowHeight: rowHeight) },
                         onDragSelection: { store.dragSelection(translation: $0) },
                         onEndDragSelection: { store.endDragSelection() }
                     )
@@ -475,7 +490,8 @@ struct ScoreView: View {
                                     let note = hitNote(at: drag.startLocation, track: track, layout: layout, rowHeight: rowHeight)
                                     mouseDragNote = .some(note)
                                     if let note {
-                                        if !isSelectedTrack || !store.selectedNoteIDs.contains(note) {
+                                        // 選んである音符（ほかのトラックのものも）をつかんだら、選んだ全部を動かす
+                                        if !store.selectedNoteIDs.contains(note) {
                                             store.selectNote(note, track: track.id, toggles: Self.isShiftDown)
                                         }
                                     } else {
@@ -485,7 +501,7 @@ struct ScoreView: View {
                                 if case .some(.some) = mouseDragNote {
                                     store.dragSelection(translation: drag.translation)
                                 } else {
-                                    updateBox(from: drag.startLocation, to: drag.location, track: track, layout: layout, rowHeight: rowHeight)
+                                    updateBox(from: drag.startLocation, to: drag.location, trackIndex: trackIndex, layout: layout, rowHeight: rowHeight)
                                 }
                             }
                             .onEnded { _ in
@@ -499,11 +515,11 @@ struct ScoreView: View {
                         onBegan: { location in
                             boxStart = location
                             store.beginBoxSelection(track: track.id, adding: false)
-                            updateBox(from: location, to: location, track: track, layout: layout, rowHeight: rowHeight)
+                            updateBox(from: location, to: location, trackIndex: trackIndex, layout: layout, rowHeight: rowHeight)
                         },
                         onChanged: { location in
                             guard let start = boxStart else { return }
-                            updateBox(from: start, to: location, track: track, layout: layout, rowHeight: rowHeight)
+                            updateBox(from: start, to: location, trackIndex: trackIndex, layout: layout, rowHeight: rowHeight)
                         },
                         onEnded: {
                             boxStart = nil

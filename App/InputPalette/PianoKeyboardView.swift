@@ -25,6 +25,23 @@ struct PianoKeyboardBlock: View {
                     .foregroundStyle(Palette.chord)
                 }
                 Spacer(minLength: 0)
+                // コピーは音符を選んでいるとき、貼り付けは貼れるときだけ出す（キーボードの無い iPad 向け。⌘C／⌘V と同じ）
+                if store.hasNoteSelection {
+                    headerButton(action: { store.copySelection() }) {
+                        Label("コピー", systemImage: "doc.on.doc")
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 10)
+                    }
+                    .accessibilityLabel("選んだ音符をコピー")
+                }
+                if store.canPaste {
+                    headerButton(action: { store.paste() }) {
+                        Label("貼り付け", systemImage: "doc.on.clipboard")
+                            .font(.system(size: 12))
+                            .padding(.horizontal, 10)
+                    }
+                    .accessibilityLabel("編集位置に貼り付け")
+                }
                 // 音符を選んでいるときは「選んだ音を消す」になる
                 headerButton(action: onBackspace) {
                     Label(store.hasNoteSelection ? "選んだ音を消す" : "戻って消す", systemImage: "delete.left")
