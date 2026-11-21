@@ -58,23 +58,23 @@ struct PaletteHeading: View {
     }
 }
 
-/// 入力方法：鍵盤／譜面を直接タップ／MIDIキーボード。
+/// 入力方法：鍵盤／譜面を直接タップ／MIDIキーボード。下に、選んだ音を半音上げ下げする ♯・♭。
 struct InputMethodView: View {
     let store: SketchStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             PaletteHeading("入力方法")
             ForEach(InputMethod.allCases, id: \.self) { method in
                 let isSelected = store.inputMethod == method
                 Button {
-                    store.inputMethod = method
+                    store.setInputMethod(method)
                 } label: {
                     Text(method.title)
                         .font(.system(size: 14, weight: isSelected ? .bold : .regular))
                         .foregroundStyle(isSelected ? Palette.paper : Palette.ink)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 38)
+                        .frame(height: 32)
                         .background(isSelected ? Palette.ink : Palette.paper, in: .rect(cornerRadius: 10))
                         .overlay {
                             if !isSelected { RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1) }
@@ -86,11 +86,31 @@ struct InputMethodView: View {
                 .opacity(method.isAvailable ? 1 : 0.6)
             }
             Spacer(minLength: 0)
-            Text("入力後は自動で次の拍へ進む")
-                .font(.system(size: 11))
-                .foregroundStyle(Palette.inkTertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            HStack(spacing: 6) {
+                accidentalButton("♯", help: "選んだ音を半音上げる", semitones: 1)
+                accidentalButton("♭", help: "選んだ音を半音下げる", semitones: -1)
+            }
         }
+    }
+
+    private func accidentalButton(_ symbol: String, help: String, semitones: Int) -> some View {
+        let isEnabled = store.canChangeAccidental
+        return Button {
+            store.changeAccidental(semitones: semitones)
+        } label: {
+            Text(symbol)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(Palette.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 32)
+                .background(Palette.paper, in: .rect(cornerRadius: 10))
+                .overlay { RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.rule, lineWidth: 1) }
+                .contentShape(.rect(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.4)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }

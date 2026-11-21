@@ -194,6 +194,27 @@ public enum NoteEditing {
         return placeJoined(ids: [], moving: [], moves: moves, in: &track, timeSignature: timeSignature)
     }
 
+    /// 1音を start から duration の長さで重ねて置く（譜面の直接タップ）。重ね方は貼り付けと同じ
+    /// （別の高さの音とは重ね、同じ高さの音と休符は上書き。小節線や書けない長さは分けてタイでつなぐ。曲の終わりで切る）。
+    /// - tieFromPrevious なら、start で終わる同じ音高の音符からタイでつなぐ。
+    /// - Returns: 置いた音符（タイでつないだ一続き）の ID。
+    @discardableResult
+    public static func place(
+        pitch: MIDINote, at start: Tick, duration: Tick, tieFromPrevious: Bool = false,
+        in track: inout Track, timeSignature: TimeSignature, totalTicks: Tick
+    ) -> [Note.ID] {
+        let placed = paste([Note(start: start, duration: duration, pitch: pitch)], offset: 0, in: &track,
+                           timeSignature: timeSignature, totalTicks: totalTicks)
+        if tieFromPrevious, !placed.isEmpty {
+            let ids = Set(placed)
+            for index in track.notes.indices where track.notes[index].end == start && track.notes[index].pitch == pitch
+                && !ids.contains(track.notes[index].id) {
+                track.notes[index].tiesToNext = true
+            }
+        }
+        return placed
+    }
+
     /// 移動の下ごしらえ：選んだ音を消し、移動先で同じ高さの音・休符を上書きし、手前の音からのタイを外す。
     /// - Returns: 元の位置で重なっていた音と、移動先（タイの一続きは1つの長い音として。同じ位置・同じ高さには重ねない）。
     private static func prepareMove(

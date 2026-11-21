@@ -1,4 +1,5 @@
-/// 入力方法。いまは鍵盤だけ（譜面の直接タップと MIDI キーボードは詳細が未決）。
+/// 入力方法。鍵盤と譜面の直接タップ（MIDI キーボードはまだ無い）。
+/// 譜面の直接タップを選んでいる間も、鍵盤と休符のボタンで入力できる。
 enum InputMethod: CaseIterable {
     case keyboard
     case scoreTap
@@ -12,5 +13,5 @@ enum InputMethod: CaseIterable {
         }
     }
 
-    var isAvailable: Bool { self == .keyboard }
+    var isAvailable: Bool { self != .midiKeyboard }
 }

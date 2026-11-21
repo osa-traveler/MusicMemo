@@ -62,7 +62,15 @@ final class SketchStore {
     private(set) var noteDrag: NoteDrag?
 
     // 入力パレット
-    var inputMethod: InputMethod = .keyboard
+    private(set) var inputMethod: InputMethod = .keyboard
+
+    /// 入力方法を切り替える。譜面の直接タップでは、編集位置の入力予定の音（鍵盤で直前に入れた音）は出さない。
+    func setInputMethod(_ method: InputMethod) {
+        guard method.isAvailable else { return }
+        inputMethod = method
+        tapHover = nil
+        if method == .scoreTap { editor.previewPitch = nil }
+    }
     /// トラックごとの鍵盤の表示範囲（左端の C の MIDI ノート番号）。
     private var keyboardLowestC: [Track.ID: MIDINote] = [:]
 
@@ -248,7 +256,7 @@ final class SketchStore {
         guard selectedTrack?.isDrums != true else { return }
         editor.previewPitch = pitch
         // 再生中は音だけ鳴らして入力しない（赤い線が動いていて入る位置が分かりにくいため）
-        guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex else { return }
+        guard !isPlaying, inputMethod != .midiKeyboard, let trackIndex = selectedTrackIndex else { return }
 
         if let range = pendingEntry ?? (addToChord ? lastEntry : nil) {
             // 和音に重ねる（押している途中の入力は同じ取り消し単位にまとめる）
@@ -283,7 +291,7 @@ final class SketchStore {
 
     /// 休符を選択中の音価で入力して進める。
     func enterRest() {
-        guard !isPlaying, inputMethod == .keyboard, let trackIndex = selectedTrackIndex, !sketch.tracks[trackIndex].isDrums else { return }
+        guard !isPlaying, inputMethod != .midiKeyboard, let trackIndex = selectedTrackIndex, !sketch.tracks[trackIndex].isDrums else { return }
         clearNoteSelection()
         recordUndo()
         let range = NoteEditing.enter(
@@ -512,6 +520,63 @@ final class SketchStore {
         lastEntry = nil
         setEditPosition(editor.editPosition + content.length)
         revealEditPosition()
+    }
+
+    // MARK: 譜面の直接タップ
+
+    /// Mac：ポインタを乗せた所に入る予定の音（半透明の青で出す）。
+    struct TapHover: Equatable {
+        var trackID: Track.ID
+        var tick: Tick
+        var pitch: MIDINote
+    }
+    var tapHover: TapHover?
+
+    /// 譜面タップで置く位置の刻み：16分。3連符がオンなら3連の刻み（3連8分、それより短い音価ならその長さ）。
+    var tapGrid: Tick {
+        editor.duration.isTriplet
+            ? min(editor.duration.ticks, NoteDuration(.eighth, triplet: true).ticks)
+            : NoteDuration(.sixteenth).ticks
+    }
+
+    /// 五線上の位置の音（調の音階の音。ドラム譜なら、その位置の楽器）。
+    func tapPitch(track: Track, staffPosition: Int) -> MIDINote {
+        min(max(track.clef.pitch(atStaffPosition: staffPosition, in: sketch.key), 0), 127)
+    }
+
+    /// 譜面タップで1音を置く：選択中の音価で、今ある音符に重ねる（同じ高さの音と休符は上書き）。
+    /// 置いた音を鳴らして選んだ状態にし、編集位置を置いた音の終わりへ進める。
+    func placeNote(track id: Track.ID, at tick: Tick, staffPosition: Int) {
+        guard !isPlaying, inputMethod == .scoreTap, let index = sketch.tracks.firstIndex(where: { $0.id == id }) else { return }
+        selectTrack(id)
+        clearNoteSelection()
+        var track = sketch.tracks[index]
+        let pitch = tapPitch(track: track, staffPosition: staffPosition)
+        let ids = NoteEditing.place(pitch: pitch, at: tick, duration: editor.duration.ticks, tieFromPrevious: editor.isTieOn,
+                                    in: &track, timeSignature: sketch.timeSignature, totalTicks: sketch.totalTicks)
+        guard !ids.isEmpty else { return }
+        recordUndo()
+        sketch.tracks[index] = track
+        editor.isTieOn = false  // タイは1回使うと戻す
+        lastEntry = nil
+        tapHover = nil
+        editor.previewPitch = nil
+        selectedNoteIDs = Set(ids)
+        audition(pitch, track: id)
+        setEditPosition(track.notes.filter { ids.contains($0.id) }.map(\.end).max() ?? tick)
+        revealEditPosition()
+    }
+
+    /// ♯・♭ボタンで変えられるか（ドラム以外の音符を選んでいる）。
+    var canChangeAccidental: Bool {
+        !isPlaying && selectedTrackIndices.contains { !sketch.tracks[$0].isDrums }
+            && selectedNotes.contains { $0.pitch != nil }
+    }
+
+    /// ♯・♭ボタン：選んだ音を半音上げる／下げる（ドラムは動かさない）。
+    func changeAccidental(semitones: Int) {
+        guard canChangeAccidental else { return }
+        moveSelection(by: 0, pitch: { track in track.isDrums ? { $0 } : { $0 + semitones } })
     }
 
     /// 上下に動かすトラックか。ドラムは上下に動かすと楽器が変わるので、ほかのトラックと一緒に選んでいるときは横にだけ動かす。

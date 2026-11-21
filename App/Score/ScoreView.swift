@@ -405,6 +405,37 @@ struct ScoreView: View {
         return StaffRowView.hitNote(at: location, track: track, sketch: store.sketch, layout: layout, rowHeight: rowHeight)
     }
 
+    /// 譜面の直接タップで置く所（位置と五線上の位置）。左端の音部記号の下には置かない。
+    /// 五線上の位置は、加線4本ほどの範囲に収める（ドラム譜は楽器のある範囲）。
+    private func tapTarget(at location: CGPoint, track: Track, layout: ScoreLayout, rowHeight: CGFloat) -> (tick: Tick, staffPosition: Int)? {
+        guard location.x > store.horizontalOffset + layout.stickyWidth else { return nil }
+        let bottom = layout.bottomLineY(rowHeight: rowHeight)
+        let raw = Int(((bottom - location.y) / (layout.staffSpace / 2)).rounded())
+        let range = track.clef == .percussion ? -1...11 : -8...16
+        let position = min(max(raw, range.lowerBound), range.upperBound)
+        return (layout.tick(atContentX: location.x, grid: store.tapGrid), position)
+    }
+
+    /// 譜面の直接タップで、符頭そのものをタップしたか（同じ線・間にある音符だけ。休符や隣の線・間なら新しく置く）。
+    private func tappedHead(at location: CGPoint, target: (tick: Tick, staffPosition: Int), track: Track,
+                            layout: ScoreLayout, rowHeight: CGFloat) -> Note.ID? {
+        guard let id = hitNote(at: location, track: track, layout: layout, rowHeight: rowHeight),
+              let pitch = track.notes.first(where: { $0.id == id })?.pitch,
+              track.clef.staffPosition(ofPitch: pitch, in: store.sketch.key) == target.staffPosition else { return nil }
+        return id
+    }
+
+    /// Mac：ポインタを乗せた所に入る予定の音。符頭の上（タップすると選ぶ所）やドラッグ中は出さない。
+    private func updateTapHover(at location: CGPoint, track: Track, layout: ScoreLayout, rowHeight: CGFloat) {
+        var hover: SketchStore.TapHover?
+        if store.inputMethod == .scoreTap, !store.isPlaying, store.noteDrag == nil, store.selectionBox == nil,
+           let target = tapTarget(at: location, track: track, layout: layout, rowHeight: rowHeight),
+           tappedHead(at: location, target: target, track: track, layout: layout, rowHeight: rowHeight) == nil {
+            hover = .init(trackID: track.id, tick: target.tick, pitch: store.tapPitch(track: track, staffPosition: target.staffPosition))
+        }
+        if store.tapHover != hover { store.tapHover = hover }
+    }
+
     /// 範囲選択の箱を広げる。start・end はドラッグを始めたトラック（trackIndex 本目）の行の座標。
     /// 箱はトラックをまたげる（全トラックの行を縦に並べた座標にして、かかった各行の音符を選ぶ）。左端の音部記号の下は含めない。
     private func updateBox(from start: CGPoint, to end: CGPoint, trackIndex: Int, layout: ScoreLayout, rowHeight: CGFloat) {
@@ -467,9 +498,22 @@ struct ScoreView: View {
                         PlayingNotesLayer(store: store, track: track, key: store.sketch.key, layout: layout, rowHeight: rowHeight,
                                           isAudible: isAudible(track))
                     }
+                    .overlay(alignment: .topLeading) {
+                        TapGhostLayer(store: store, track: track, layout: layout, rowHeight: rowHeight)
+                    }
                     .overlay(alignment: .bottom) { Palette.ruleSoft.frame(height: 1) }
                     .modifier(TrackDragEffect(offset: trackDragOffset(for: track.id)))
                     .onTapGesture { location in
+                        // 譜面の直接タップ：符頭そのもの（同じ線・間）なら選び、それ以外はタップした所に音を置く
+                        if store.inputMethod == .scoreTap, !store.isPlaying {
+                            guard let target = tapTarget(at: location, track: track, layout: layout, rowHeight: rowHeight) else { return }
+                            if let note = tappedHead(at: location, target: target, track: track, layout: layout, rowHeight: rowHeight) {
+                                store.selectNote(note, track: track.id, toggles: Self.isShiftDown)
+                            } else {
+                                store.placeNote(track: track.id, at: target.tick, staffPosition: target.staffPosition)
+                            }
+                            return
+                        }
                         // 音符（休符）の上なら選ぶ（Mac の ⇧クリックは足す／外す）。
                         // それ以外は、タップしたトラックを選び、編集位置もそこへ動かす
                         if let note = hitNote(at: location, track: track, layout: layout, rowHeight: rowHeight) {
@@ -481,6 +525,15 @@ struct ScoreView: View {
                         store.setEditPosition(layout.tick(atContentX: location.x, grid: RulerView.seekGrid))
                     }
                     #if os(macOS)
+                    // 譜面の直接タップ：ポインタを乗せた所に入る予定の音を出す
+                    .onContinuousHover { phase in
+                        switch phase {
+                        case .active(let location):
+                            updateTapHover(at: location, track: track, layout: layout, rowHeight: rowHeight)
+                        case .ended:
+                            if store.tapHover?.trackID == track.id { store.tapHover = nil }
+                        }
+                    }
                     // Mac はマウスのドラッグで譜面がスクロールしないので、
                     // 音符の上から始めたら（選んでいなくても）つかんで動かし、何も無い所から始めたら範囲選択の箱を出す
                     .gesture(

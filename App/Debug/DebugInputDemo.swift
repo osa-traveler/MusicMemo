@@ -10,11 +10,17 @@ import OSLog
 /// MUSICMEMO_INPUT_DEMO=5 なら、上の3トラックの6〜7小節を箱で囲み（トラックをまたぐ範囲選択）、1拍右・半音上へ動かし、
 /// 元に戻す1回で全トラックが戻るかをログに出す。最後はドラッグの途中で止める。
 /// MUSICMEMO_INPUT_DEMO=6 なら、コピー・貼り付け・切り取り（1トラック、続けて貼る、元に戻す、トラックをまたぐ）を流してログに出す。
+/// MUSICMEMO_INPUT_DEMO=7 なら、譜面の直接タップ（和音、♯、3連符、小節線をまたぐ音、元に戻す）を流してログに出し、
+/// 最後は Mac のポインタを乗せたときの入る予定の音を出したところで止める。
 enum DebugInputDemo {
     @MainActor
     static func runIfRequested(_ store: SketchStore) {
         let mode = ProcessInfo.processInfo.environment["MUSICMEMO_INPUT_DEMO"]
-        guard let mode, ["1", "2", "3", "4", "5", "6"].contains(mode) else { return }
+        guard let mode, ["1", "2", "3", "4", "5", "6", "7"].contains(mode) else { return }
+        if mode == "7" {
+            runScoreTapDemo(store)
+            return
+        }
         if mode == "6" {
             runCopyPasteDemo(store)
             return
@@ -232,6 +238,53 @@ enum DebugInputDemo {
         store.cutSelection()
         log.notice("cut \(bars(12, 12), privacy: .public) canPaste \(store.canPaste)")
         store.scroll(toLeadingBar: 11)
+    }
+
+    /// 譜面の直接タップ。位置と五線上の位置を直接渡す（画面の座標からの変換と、符頭の当たり判定は撮影で確かめる）。
+    @MainActor
+    private static func runScoreTapDemo(_ store: SketchStore) {
+        let log = Logger(subsystem: "MusicMemo", category: "SelectDemo")
+        guard let trackID = store.editor.selectedTrackID else { return }
+        let time = store.sketch.timeSignature
+        let bar10 = time.startTick(ofBar: 10)
+        func bars() -> String {
+            let notes = store.selectedTrack?.notes.filter { $0.start >= bar10 && $0.start < bar10 + 2 * time.ticksPerBar } ?? []
+            return notes.map { "\(time.position(of: $0.start).barBeatDescription)+\($0.start % 480 == 0 ? "" : "\($0.start % 480)"):\($0.pitch.map { Pitch.noteName($0) } ?? "rest")/\($0.duration)\($0.tiesToNext ? "~" : "")" }
+                .joined(separator: " ")
+        }
+        store.setInputMethod(.scoreTap)
+        store.selectNoteValue(.quarter)
+        // 1拍目：G4（第2線）、続けて同じ位置に B4・D5 → 和音
+        for position in [2, 4, 6] {
+            store.placeNote(track: trackID, at: bar10, staffPosition: position)
+        }
+        log.notice("tap chord \(bars(), privacy: .public) edit \(time.position(of: store.editor.editPosition).description, privacy: .public)")
+        // 2拍目：A4 を置いて ♯
+        store.placeNote(track: trackID, at: bar10 + 480, staffPosition: 3)
+        store.changeAccidental(semitones: 1)
+        log.notice("tap sharp \(bars(), privacy: .public) selected \(store.selectedNotes.count)")
+        // 3拍目：3連8分を3つ
+        store.selectNoteValue(.eighth)
+        store.toggleTriplet()
+        let triplet = store.tapGrid
+        for (offset, position) in [(0, 5), (1, 4), (2, 3)] {
+            store.placeNote(track: trackID, at: bar10 + 960 + offset * triplet, staffPosition: position)
+        }
+        store.toggleTriplet()
+        // 4拍目から2分の C5（小節線をまたぐ → 4分＋タイ＋4分）、続けて元に戻す1回
+        store.selectNoteValue(.half)
+        store.placeNote(track: trackID, at: bar10 + 1440, staffPosition: 5)
+        log.notice("tap triplet+tie \(bars(), privacy: .public) edit \(time.position(of: store.editor.editPosition).description, privacy: .public)")
+        store.undo()
+        log.notice("tap undo \(bars(), privacy: .public)")
+        store.redo()
+        // ポインタを乗せたときの入る予定の音（11小節目の3拍目、F4）
+        store.clearNoteSelection()
+        store.selectNoteValue(.quarter)
+        if let track = store.selectedTrack {
+            store.tapHover = .init(trackID: trackID, tick: time.startTick(ofBar: 11) + 960, pitch: store.tapPitch(track: track, staffPosition: 1))
+        }
+        store.scroll(toLeadingBar: 10)
     }
 
     @MainActor

@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Mac のデバッグビルドで画面を撮影する（開発用）。
-# 使い方：Scripts/snapshot.sh 出力ファイル.png [倍率] [入力デモ 0/1/2/3/4/5/6] [曲の設定 0/1/2] [トラック 0/1/2] [セクション 0/1/2]
+# 使い方：Scripts/snapshot.sh 出力ファイル.png [倍率] [入力デモ 0/1/2/3/4/5/6/7] [曲の設定 0/1/2] [トラック 0/1/2] [セクション 0/1/2]
 #   例：Scripts/snapshot.sh /tmp/main.png        … サンプル曲を 100% で
 #       Scripts/snapshot.sh /tmp/zoom.png 2      … 200% で
 #       Scripts/snapshot.sh /tmp/demo.png 1 1    … 入力デモを流してから
